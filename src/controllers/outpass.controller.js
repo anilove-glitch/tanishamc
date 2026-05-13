@@ -10,6 +10,10 @@ POST /api/outpasses
 =================================================
 */
 const createOutpass = asyncHandler(async (req, res) => {
+    console.log(req.body);
+    console.log("BODY:", req.body);
+console.log("METHOD:", req.method);
+console.log("URL:", req.originalUrl);
     const {
         outpass_type,
         place_of_visit,
@@ -17,9 +21,10 @@ const createOutpass = asyncHandler(async (req, res) => {
         departure_datetime,
         arrival_datetime,
         parent_contact
-    } = req.body;
+    } = req.body || {};
 
-    const studentId = req.user?.id;
+// TEMP: fallback until JWT auth is implemented
+const studentId = req.user?.id || req.body?.student_id;
 
     if (
         !outpass_type ||
@@ -115,6 +120,7 @@ const createOutpass = asyncHandler(async (req, res) => {
         parent_contact
     ];
 
+
     const result = await pool.query(query, values);
 
     return res.status(201).json(
@@ -133,7 +139,8 @@ GET /api/outpasses/my
 =================================================
 */
 const getMyOutpasses = asyncHandler(async (req, res) => {
-    const studentId = req.user?.id;
+    // TEMP: fallback until JWT auth is implemented
+const studentId = req.user?.id || req.query.student_id;
 
     const query = `
         SELECT *
@@ -160,7 +167,8 @@ GET /api/outpasses/active
 =================================================
 */
 const getActiveOutpass = asyncHandler(async (req, res) => {
-    const studentId = req.user?.id;
+    // TEMP: fallback until JWT auth is implemented
+const studentId = req.user?.id || req.query.student_id;
 
     const query = `
         SELECT *
@@ -189,7 +197,8 @@ GET /api/outpasses/:id
 */
 const getOutpassById = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const studentId = req.user?.id;
+    // TEMP: fallback until JWT auth is implemented
+const studentId = req.user?.id || req.query.student_id;
 
     const query = `
         SELECT *
@@ -224,8 +233,8 @@ PATCH /api/outpasses/:id/cancel
 */
 const cancelOutpass = asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const studentId = req.user?.id;
-
+    // TEMP: fallback until JWT auth is implemented
+const studentId = req.user?.id || req.body.student_id;
     const existingQuery = `
         SELECT *
         FROM outpasses
