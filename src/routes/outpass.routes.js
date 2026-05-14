@@ -14,11 +14,11 @@ import {
     studentReturn
 } from "../controllers/outpass.controller.js";
 
-import verifyJWT from "../middlewares/auth.middleware.js";
+// import verifyJWT from "../middlewares/auth.middleware.js";
 
-import verifyStudent from "../middlewares/student.middleware.js";
-import verifyMMCA from "../middlewares/mmca.middleware.js";
-import verifyGuard from "../middlewares/guard.middleware.js";
+// import verifyStudent from "../middlewares/student.middleware.js";
+// import verifyMMCA from "../middlewares/mmca.middleware.js";
+// import verifyGuard from "../middlewares/guard.middleware.js";
 
 const router = express.Router();
 
@@ -28,49 +28,31 @@ STUDENT ROUTES
 =================================================
 */
 
-// Create Outpass
+// CREATE OUTPASS
 // POST /api/outpasses
 router.post(
     "/",
-    verifyJWT,
-    verifyStudent,
+    // verifyJWT,
+    // verifyStudent,
     createOutpass
 );
 
-// Get My Outpasses
+// GET MY OUTPASSES
 // GET /api/outpasses/my
 router.get(
     "/my",
-    verifyJWT,
-    verifyStudent,
+    // verifyJWT,
+    // verifyStudent,
     getMyOutpasses
 );
 
-// Get Active Outpass
+// GET ACTIVE OUTPASS
 // GET /api/outpasses/active
 router.get(
     "/active",
-    verifyJWT,
-    verifyStudent,
+    // verifyJWT,
+    // verifyStudent,
     getActiveOutpass
-);
-
-// Get Single Outpass
-// GET /api/outpasses/:id
-router.get(
-    "/:id",
-    verifyJWT,
-    verifyStudent,
-    getOutpassById
-);
-
-// Cancel Outpass
-// PATCH /api/outpasses/:id/cancel
-router.patch(
-    "/:id/cancel",
-    verifyJWT,
-    verifyStudent,
-    cancelOutpass
 );
 
 /*
@@ -79,21 +61,21 @@ GUARD ROUTES
 =================================================
 */
 
-// Student Exit
+// STUDENT EXIT
 // POST /api/outpasses/guard/exit
 router.post(
     "/guard/exit",
-    verifyJWT,
-    verifyGuard,
+    // verifyJWT,
+    // verifyGuard,
     studentExit
 );
 
-// Student Return
+// STUDENT RETURN
 // POST /api/outpasses/guard/return
 router.post(
     "/guard/return",
-    verifyJWT,
-    verifyGuard,
+    // verifyJWT,
+    // verifyGuard,
     studentReturn
 );
 
@@ -103,40 +85,64 @@ MMCA ROUTES
 =================================================
 */
 
-// Get Pending Outpasses
+// GET PENDING OUTPASSES
 // GET /api/outpasses/mmca/pending
 router.get(
     "/mmca/pending",
-    verifyJWT,
-    verifyMMCA,
+    // verifyJWT,
+    // verifyMMCA,
     getPendingOutpasses
 );
 
-// Approve Outpass
-// PATCH /api/outpasses/mmca/:id/approve
-router.patch(
-    "/mmca/:id/approve",
-    verifyJWT,
-    verifyMMCA,
-    approveOutpass
-);
-
-// Reject Outpass
-// PATCH /api/outpasses/mmca/:id/reject
-router.patch(
-    "/mmca/:id/reject",
-    verifyJWT,
-    verifyMMCA,
-    rejectOutpass
-);
-
-// Get Late Returns
+// GET LATE RETURNS
 // GET /api/outpasses/mmca/late
 router.get(
     "/mmca/late",
-    verifyJWT,
-    verifyMMCA,
+    // verifyJWT,
+    // verifyMMCA,
     getLateReturns
+);
+
+// APPROVE OUTPASS
+// PATCH /api/outpasses/mmca/:id/approve
+router.patch(
+    "/mmca/:id/approve",
+    // verifyJWT,
+    // verifyMMCA,
+    approveOutpass
+);
+
+// REJECT OUTPASS
+// PATCH /api/outpasses/mmca/:id/reject
+router.patch(
+    "/mmca/:id/reject",
+    // verifyJWT,
+    // verifyMMCA,
+    rejectOutpass
+);
+
+/*
+=================================================
+DYNAMIC ROUTES (KEEP LAST)
+=================================================
+*/
+
+// GET SINGLE OUTPASS
+// GET /api/outpasses/:id
+router.get(
+    "/:id",
+    // verifyJWT,
+    // verifyStudent,
+    getOutpassById
+);
+
+// CANCEL OUTPASS
+// PATCH /api/outpasses/:id/cancel
+router.patch(
+    "/:id/cancel",
+    // verifyJWT,
+    // verifyStudent,
+    cancelOutpass
 );
 
 export default router;
