@@ -785,35 +785,7 @@ ON room_assignments
 FOR EACH ROW
 EXECUTE FUNCTION recalculate_room_occupancy();
 
--- -------------------------------------------------
--- Validate Submission Leader
--- -------------------------------------------------
 
-CREATE OR REPLACE FUNCTION validate_submission_leader()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_primary INTEGER;
-BEGIN
-
-    SELECT primary_applicant_id
-    INTO v_primary
-    FROM housing_groups
-    WHERE id = NEW.group_id;
-
-    IF NEW.submitted_by <> v_primary THEN
-        RAISE EXCEPTION
-        'Only current group leader may submit allocations';
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_validate_submission_leader
-BEFORE INSERT
-ON allocation_submissions
-FOR EACH ROW
-EXECUTE FUNCTION validate_submission_leader();
 
 -- -------------------------------------------------
 -- Validate Submission Timing

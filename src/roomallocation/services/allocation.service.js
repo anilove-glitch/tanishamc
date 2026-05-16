@@ -42,7 +42,8 @@ class AllocationService {
     async submitPreferences({
         groupId,
         submittedBy,
-        batchId,
+        hostelId,
+        batchNumber,
         roundNumber,
         preferences,
     }) {
@@ -51,12 +52,12 @@ class AllocationService {
             await client.query('BEGIN');
 
             // ---------------------------------------------
-            // Validate group & leader
+            // Validate group — any member can submit
             // ---------------------------------------------
             const groupRes = await client.query(`
-                SELECT hg.*, 
-                       (SELECT COUNT(*) FROM students s WHERE s.group_id = hg.id) as group_size 
-                FROM housing_groups hg 
+                SELECT hg.*,
+                       (SELECT COUNT(*) FROM students s WHERE s.group_id = hg.id) as group_size
+                FROM housing_groups hg
                 WHERE hg.id = $1
             `, [groupId]);
 
@@ -66,8 +67,13 @@ class AllocationService {
 
             const group = groupRes.rows[0];
 
-            if (group.primary_applicant_id !== submittedBy) {
-                throw new Error('Only leader can submit preferences');
+            // Verify submitter belongs to this group
+            const memberRes = await client.query(
+                'SELECT 1 FROM students WHERE id = $1 AND group_id = $2',
+                [submittedBy, groupId]
+            );
+            if (memberRes.rowCount === 0) {
+                throw new Error('Submitter is not a member of this group');
             }
 
             // ---------------------------------------------
@@ -81,21 +87,18 @@ class AllocationService {
             }
 
             // ---------------------------------------------
-            // Validate preference count
+            // Validate batch — look up by hostel_id + batch_number (unique)
             // ---------------------------------------------
-            if (!Array.isArray(preferences) || preferences.length !== 10) {
-                throw new Error('Exactly 10 preferences required');
-            }
-
-            // ---------------------------------------------
-            // Validate batch
-            // ---------------------------------------------
-            const batchRes = await client.query('SELECT * FROM batches WHERE id = $1', [batchId]);
+            const batchRes = await client.query(
+                'SELECT id, hostel_id, start_time, end_time FROM batches WHERE hostel_id = $1 AND batch_number = $2',
+                [hostelId, batchNumber]
+            );
             if (batchRes.rowCount === 0) {
                 throw new Error('Batch not found');
             }
 
             const batch = batchRes.rows[0];
+            const resolvedBatchId = batch.id;
             const now = new Date();
 
             if (now < new Date(batch.start_time) || now > new Date(batch.end_time)) {
@@ -103,9 +106,34 @@ class AllocationService {
             }
 
             // ---------------------------------------------
-            // Get effective leader rank
+            // Validate preference count against available rooms
             // ---------------------------------------------
-            const leaderRes = await client.query('SELECT individual_rank FROM students WHERE id = $1', [submittedBy]);
+            const availableRoomsRes = await client.query(
+                'SELECT COUNT(*) as cnt FROM rooms WHERE hostel_id = $1 AND current_occupancy < max_capacity',
+                [batch.hostel_id]
+            );
+            const availableCount = parseInt(availableRoomsRes.rows[0].cnt, 10);
+            const maxPreferences = Math.min(availableCount, 10);
+
+            if (!Array.isArray(preferences) || preferences.length === 0) {
+                throw new Error('At least one preference is required');
+            }
+            if (availableCount >= 10 && preferences.length !== 10) {
+                throw new Error('Exactly 10 preferences required when 10 or more rooms are available');
+            }
+            if (preferences.length > maxPreferences) {
+                throw new Error(`Cannot submit more preferences than available rooms (${availableCount})`);
+            }
+
+
+
+            // ---------------------------------------------
+            // Get effective leader rank (always from the group's primary applicant)
+            // ---------------------------------------------
+            const leaderRes = await client.query(
+                'SELECT individual_rank FROM students WHERE id = $1',
+                [group.primary_applicant_id]
+            );
             const effectiveLeaderRank = leaderRes.rows[0]?.individual_rank;
 
             // ---------------------------------------------
@@ -117,16 +145,23 @@ class AllocationService {
                     effective_group_rank, effective_leader_rank, effective_group_size
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (group_id, batch_id, round_number) DO NOTHING
                 RETURNING id
             `, [
                 groupId,
                 submittedBy,
-                batchId,
+                resolvedBatchId,
                 roundNumber,
                 group.group_rank,
                 effectiveLeaderRank,
                 group.group_size
             ]);
+
+            // If another member already submitted this round, silently accept
+            if (insertSubRes.rowCount === 0) {
+                await client.query('ROLLBACK');
+                return { success: true, alreadySubmitted: true };
+            }
 
             const submissionId = insertSubRes.rows[0].id;
 
@@ -320,7 +355,6 @@ class AllocationService {
     async forceAssignRoom({
         studentId,
         roomId,
-        adminId,
     }) {
         const client = await pool.connect();
         try {
