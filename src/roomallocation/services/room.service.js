@@ -29,24 +29,9 @@ export const getHostelById = async (hostelId) => {
     }
 };
 
-/**
- * Update hostel phase
- */
-export const updateHostelPhase = async (hostelId, phase) => {
-    try {
-        const result = await pool.query(
-            `UPDATE hostels SET current_phase = $1 WHERE id = $2 RETURNING *`,
-            [phase, hostelId]
-        );
-        if (result.rows.length === 0) {
-            throw new ApiError(404, 'Hostel not found');
-        }
-        return result.rows[0];
-    } catch (error) {
-        if (error instanceof ApiError) throw error;
-        throw new ApiError(500, 'Error updating hostel phase: ' + error.message);
-    }
-};
+// NOTE: updateHostelPhase() was removed from this file.
+// Phase management belongs in: phase/phase.service.js
+// Use setCurrentPhase(hostelId, phase) from there.
 
 /**
  * Fetch all rooms for a hostel

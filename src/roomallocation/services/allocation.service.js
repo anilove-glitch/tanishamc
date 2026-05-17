@@ -52,13 +52,15 @@ class AllocationService {
             await client.query('BEGIN');
 
             // ---------------------------------------------
-            // Validate group — any member can submit
+            // LOCK the group row — prevents concurrent
+            // leader changes, shatters, and dissolves
             // ---------------------------------------------
             const groupRes = await client.query(`
                 SELECT hg.*,
                        (SELECT COUNT(*) FROM students s WHERE s.group_id = hg.id) as group_size
                 FROM housing_groups hg
                 WHERE hg.id = $1
+                FOR UPDATE
             `, [groupId]);
 
             if (groupRes.rowCount === 0) {
@@ -77,7 +79,7 @@ class AllocationService {
             }
 
             // ---------------------------------------------
-            // Validate status
+            // Validate group status
             // ---------------------------------------------
             if (
                 group.status !== GROUP_STATUS.SOFT_LOCKED &&
@@ -87,10 +89,10 @@ class AllocationService {
             }
 
             // ---------------------------------------------
-            // Validate batch — look up by hostel_id + batch_number (unique)
+            // Validate batch — must exist AND status = ACTIVE
             // ---------------------------------------------
             const batchRes = await client.query(
-                'SELECT id, hostel_id, start_time, end_time FROM batches WHERE hostel_id = $1 AND batch_number = $2',
+                'SELECT id, hostel_id, start_time, end_time, status FROM batches WHERE hostel_id = $1 AND batch_number = $2',
                 [hostelId, batchNumber]
             );
             if (batchRes.rowCount === 0) {
@@ -101,13 +103,39 @@ class AllocationService {
             const resolvedBatchId = batch.id;
             const now = new Date();
 
+            if (batch.status !== 'ACTIVE') {
+                throw new Error(`Batch is not active (current status: ${batch.status})`);
+            }
+
             if (now < new Date(batch.start_time) || now > new Date(batch.end_time)) {
-                throw new Error('Batch inactive');
+                throw new Error('Submission is outside the allowed batch time window');
             }
 
             // ---------------------------------------------
-            // Validate preference count against available rooms
+            // Validate preference list
             // ---------------------------------------------
+            if (!Array.isArray(preferences) || preferences.length === 0) {
+                throw new Error('At least one preference is required');
+            }
+
+            // Detect duplicate room IDs in the submitted list
+            const uniqueRoomIds = new Set(preferences);
+            if (uniqueRoomIds.size !== preferences.length) {
+                throw new Error('Preference list contains duplicate room IDs');
+            }
+
+            // Validate all submitted room IDs exist in this hostel
+            const roomCheckRes = await client.query(
+                `SELECT id FROM rooms WHERE id = ANY($1::uuid[]) AND hostel_id = $2`,
+                [preferences, batch.hostel_id]
+            );
+            if (roomCheckRes.rowCount !== preferences.length) {
+                const foundIds = new Set(roomCheckRes.rows.map(r => r.id));
+                const invalid = preferences.filter(id => !foundIds.has(id));
+                throw new Error(`Invalid or non-existent room IDs: ${invalid.join(', ')}`);
+            }
+
+            // Check available room count (max 10 preferences)
             const availableRoomsRes = await client.query(
                 'SELECT COUNT(*) as cnt FROM rooms WHERE hostel_id = $1 AND current_occupancy < max_capacity',
                 [batch.hostel_id]
@@ -115,9 +143,6 @@ class AllocationService {
             const availableCount = parseInt(availableRoomsRes.rows[0].cnt, 10);
             const maxPreferences = Math.min(availableCount, 10);
 
-            if (!Array.isArray(preferences) || preferences.length === 0) {
-                throw new Error('At least one preference is required');
-            }
             if (availableCount >= 10 && preferences.length !== 10) {
                 throw new Error('Exactly 10 preferences required when 10 or more rooms are available');
             }
@@ -157,25 +182,43 @@ class AllocationService {
                 group.group_size
             ]);
 
-            // If another member already submitted this round, silently accept
+            // First-submission-wins: if another member already submitted, return metadata
             if (insertSubRes.rowCount === 0) {
+                const existingRes = await client.query(
+                    `SELECT asb.id, asb.submitted_by, asb.submitted_at, s.name as submitted_by_name
+                     FROM allocation_submissions asb
+                     JOIN students s ON s.id = asb.submitted_by
+                     WHERE asb.group_id = $1 AND asb.batch_id = $2 AND asb.round_number = $3`,
+                    [groupId, resolvedBatchId, roundNumber]
+                );
+                const existing = existingRes.rows[0];
                 await client.query('ROLLBACK');
-                return { success: true, alreadySubmitted: true };
+                return {
+                    success: true,
+                    alreadySubmitted: true,
+                    submissionId:  existing?.id ?? null,
+                    submittedBy:   existing?.submitted_by_name ?? null,
+                    submittedAt:   existing?.submitted_at ?? null,
+                };
             }
 
             const submissionId = insertSubRes.rows[0].id;
 
             // ---------------------------------------------
             // Insert preferences
+            // Sorted by room_id (ASC) for deterministic lock ordering
+            // to eliminate deadlock risk when submissions overlap.
+            // preference_order retains the original user ranking.
             // ---------------------------------------------
+            const sortedPreferences = [...preferences].sort(); // deterministic ORDER BY room_id
             const prefValues = [];
             let valueIndex = 1;
             const queryParams = [];
 
-            for (let i = 0; i < preferences.length; i++) {
-                const roomId = preferences[i];
+            for (const roomId of sortedPreferences) {
+                const preference_order = preferences.indexOf(roomId) + 1; // original user order
                 prefValues.push(`($${valueIndex}, $${valueIndex + 1}, $${valueIndex + 2})`);
-                queryParams.push(submissionId, roomId, i + 1);
+                queryParams.push(submissionId, roomId, preference_order);
                 valueIndex += 3;
             }
 

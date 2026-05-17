@@ -135,11 +135,16 @@ export const respondToGroupRequest = async (requestId, status) => {
                 [request.group_id, request.student_id]
             );
 
-            // Auto cancel other pending requests for this student
+            // Auto-cancel other PENDING requests for this student.
+            // Explicitly exclude the just-accepted request and any already-accepted ones
+            // to avoid cancelling a legitimately accepted request.
             await client.query(
-                `UPDATE group_requests SET status = 'CANCELED' 
-                 WHERE student_id = $1 AND status = 'PENDING'`,
-                [request.student_id]
+                `UPDATE group_requests
+                 SET status = 'CANCELED'
+                 WHERE student_id = $1
+                   AND status = 'PENDING'
+                   AND id != $2`,
+                [request.student_id, requestId]
             );
         }
 
@@ -160,25 +165,49 @@ export const respondToGroupRequest = async (requestId, status) => {
 
 /**
  * Leave a group
+ * Explicit pre-mutation validation before relying on triggers.
  */
 export const leaveGroup = async (studentId) => {
+    const client = await pool.connect();
     try {
-        // Trigger handle_primary_applicant_leave handles leader reassignment/deletion automatically
-        // Trigger prevent_illegal_group_modification prevents leaving if locked
-        const result = await pool.query(
-            `UPDATE students SET group_id = NULL WHERE id = $1 AND group_id IS NOT NULL RETURNING *`,
+        await client.query('BEGIN');
+
+        // 1. Verify student exists and is in a group
+        const studentRes = await client.query(
+            `SELECT id, group_id FROM students WHERE id = $1 FOR UPDATE`,
             [studentId]
         );
-        if (result.rows.length === 0) {
-             throw new ApiError(400, 'Student is not in a group or group is locked');
+        if (studentRes.rows.length === 0) throw new ApiError(404, 'Student not found');
+        const student = studentRes.rows[0];
+        if (!student.group_id) throw new ApiError(400, 'Student is not in any group');
+
+        // 2. Verify group exists and is in a mutable state
+        const groupRes = await client.query(
+            `SELECT id, status FROM housing_groups WHERE id = $1`,
+            [student.group_id]
+        );
+        if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
+        const group = groupRes.rows[0];
+
+        const LOCKED_STATES = ['SOFT_LOCKED', 'HARD_LOCKED', 'ALLOCATED'];
+        if (LOCKED_STATES.includes(group.status)) {
+            throw new ApiError(400, `Cannot leave group — it is currently ${group.status}`);
         }
+
+        // 3. Perform the leave — triggers handle leader reassignment/group deletion
+        await client.query(
+            `UPDATE students SET group_id = NULL WHERE id = $1`,
+            [studentId]
+        );
+
+        await client.query('COMMIT');
         return { success: true, message: 'Successfully left group' };
     } catch (error) {
-        if (error.message && error.message.includes('forbidden after lock')) {
-            throw new ApiError(400, 'Cannot leave group. It is already locked.');
-        }
+        await client.query('ROLLBACK');
         if (error instanceof ApiError) throw error;
         throw new ApiError(500, 'Error leaving group: ' + error.message);
+    } finally {
+        client.release();
     }
 };
 
