@@ -4,6 +4,8 @@ import authRoutes from './working-routes/auth.js';
 import complaintRoutes from './working-routes/complaint.js';
 import outpassRoutes from './working-routes/outpass.js';
 import groupRoutes from './src/roomallocation/groups/groups.routes.js';
+import roomRoutes from './src/roomallocation/rooms/rooms.routes.js';
+import hostelRoutes from './src/roomallocation/hostels/hostels.routes.js';
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -23,6 +25,9 @@ app.use('/auth', authRoutes);
 app.use('/complaint', complaintRoutes);
 app.use('/outpass', outpassRoutes);
 app.use('/api/groups', groupRoutes);
+app.use('/api/rooms', roomRoutes);
+app.use('/api/hostels', hostelRoutes);
+
 
 app.get('/', (req, res) => {
     res.send('Hello World!');

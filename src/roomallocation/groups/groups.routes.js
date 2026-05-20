@@ -3,10 +3,16 @@ import express from "express";
 import {
     createGroupController,
     inviteStudentController,
-    acceptInviteController
+    acceptInviteController,
+    leaveGroupController,
+    transferLeadershipController,
+    getAllRequestsController,
+    getAllGroupsController,
+    getGroupMembersController
 } from "./groups.controller.js";
 
-const router = express.Router();
+const router =
+    express.Router();
 
 /*
 =================================================
@@ -39,6 +45,49 @@ ACCEPT INVITE
 router.post(
     "/accept-invite",
     acceptInviteController
+);
+
+/*
+=================================================
+LEAVE GROUP
+=================================================
+*/
+
+router.post(
+    "/leave",
+    leaveGroupController
+);
+
+/*
+=================================================
+TRANSFER LEADERSHIP
+=================================================
+*/
+
+router.post(
+    "/transfer-leadership",
+    transferLeadershipController
+);
+
+/*
+=================================================
+GET ALL REQUESTS
+=================================================
+*/
+
+router.get(
+    "/requests",
+    getAllRequestsController
+);
+
+router.get(
+    "/",
+    getAllGroupsController
+);
+
+router.get(
+    "/:groupId/members",
+    getGroupMembersController
 );
 
 export default router;
