@@ -1,37 +1,15 @@
 import pool from '../../db/pool.js';
-import { roundAllocator } from '../engine/roundallocator.js';
+import { roundAllocator }       from '../engine/roundallocator.js';
+import { evaluate as evaluateRollovers } from '../engine/rolloverEvaluator.js';
+import { execute as executeGhostPenalty } from '../engine/ghostPenalty.js';
+import { evaluate as evaluateShatter }  from '../engine/shatterProtocol.js';
+import { execute as executeFinalSweep } from '../engine/finalSweep.js';
 
-import { SYSTEM_PHASES } from '../constants/phases.js';
-import { GROUP_STATUS } from '../constants/statuses.js';
+const rolloverEvaluator  = { evaluate: evaluateRollovers };
+const ghostPenalty       = { execute:  executeGhostPenalty };
+const shatterProtocol    = { evaluate: (groupId) => evaluateShatter(groupId) };
+const finalSweep         = { execute:  executeFinalSweep };
 
-// Engine stubs (to be implemented later)
-const rolloverEvaluator = {
-    evaluate: async (batchId) => {
-        console.warn('rolloverEvaluator.evaluate not implemented');
-        return { success: true, message: 'Stubbed' };
-    }
-};
-
-const ghostPenalty = {
-    execute: async (batchId) => {
-        console.warn('ghostPenalty.execute not implemented');
-        return { success: true, message: 'Stubbed' };
-    }
-};
-
-const shatterProtocol = {
-    evaluate: async (groupId) => {
-        console.warn('shatterProtocol.evaluate not implemented');
-        return { success: true, message: 'Stubbed' };
-    }
-};
-
-const finalSweep = {
-    execute: async (hostelId) => {
-        console.warn('finalSweep.execute not implemented');
-        return { success: true, message: 'Stubbed' };
-    }
-};
 
 class AllocationService {
 
