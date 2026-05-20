@@ -251,6 +251,40 @@ async (
 
     /*
     ============================
+    CHECK DUPLICATE REQUEST
+    ============================
+    */
+
+    const existingRequest =
+        await pool.query(
+            `
+            SELECT *
+            FROM group_requests
+            WHERE group_id = $1
+            AND student_id = $2
+            AND status IN (
+                'PENDING',
+                'ACCEPTED'
+            )
+            `,
+            [
+                groupId,
+                studentId
+            ]
+        );
+
+    if (
+        existingRequest.rows.length > 0
+    ) {
+
+        throw new Error(
+            "Invite already exists"
+        );
+
+    }
+
+    /*
+    ============================
     CREATE INVITE
     ============================
     */
@@ -287,9 +321,9 @@ async (
             inviteResult.rows[0]
 
     };
-    
 
 };
+
 /*
 =================================================
 ACCEPT INVITE SERVICE
@@ -443,6 +477,7 @@ async (requestId) => {
     }
 
 };
+
 /*
 =================================================
 LEAVE GROUP SERVICE
@@ -633,5 +668,269 @@ async (studentId) => {
         client.release();
 
     }
+
+};
+
+/*
+=================================================
+TRANSFER LEADERSHIP SERVICE
+=================================================
+*/
+
+export const transferLeadershipService =
+async (
+    groupId,
+    newLeaderId
+) => {
+
+    const client =
+        await pool.connect();
+
+    try {
+
+        await client.query(
+            "BEGIN"
+        );
+
+        /*
+        ============================
+        CHECK GROUP EXISTS
+        ============================
+        */
+
+        const groupResult =
+            await client.query(
+                `
+                SELECT *
+                FROM housing_groups
+                WHERE id = $1
+                `,
+                [groupId]
+            );
+
+        const group =
+            groupResult.rows[0];
+
+        if (!group) {
+
+            throw new Error(
+                "Group not found"
+            );
+
+        }
+
+        /*
+        ============================
+        CHECK STUDENT EXISTS
+        ============================
+        */
+
+        const studentResult =
+            await client.query(
+                `
+                SELECT *
+                FROM students
+                WHERE id = $1
+                `,
+                [newLeaderId]
+            );
+
+        const student =
+            studentResult.rows[0];
+
+        if (!student) {
+
+            throw new Error(
+                "Student not found"
+            );
+
+        }
+
+        /*
+        ============================
+        CHECK STUDENT BELONGS
+        TO SAME GROUP
+        ============================
+        */
+
+        if (
+            !student.group_id
+        ) {
+
+            throw new Error(
+                "Student not in any group"
+            );
+
+        }
+
+        if (
+            student.group_id.toString()
+            !==
+            groupId.toString()
+        ) {
+
+            throw new Error(
+                "Student not in this group"
+            );
+
+        }
+
+        /*
+        ============================
+        UPDATE LEADER
+        ============================
+        */
+
+        const updatedGroup =
+            await client.query(
+                `
+                UPDATE housing_groups
+                SET primary_applicant_id = $1
+                WHERE id = $2
+                RETURNING *
+                `,
+                [
+                    newLeaderId,
+                    groupId
+                ]
+            );
+
+        await client.query(
+            "COMMIT"
+        );
+
+        return {
+
+            message:
+                "Leadership transferred successfully",
+
+            group:
+                updatedGroup.rows[0]
+
+        };
+
+    } catch (error) {
+
+        await client.query(
+            "ROLLBACK"
+        );
+
+        throw error;
+
+    } finally {
+
+        client.release();
+
+    }
+
+};
+/*
+=================================================
+GET ALL REQUESTS
+=================================================
+*/
+
+export const getAllRequestsService =
+async () => {
+
+    const result =
+        await pool.query(
+            `
+            SELECT *
+            FROM group_requests
+            ORDER BY created_at DESC
+            `
+        );
+
+    return result.rows;
+
+};
+
+/*
+=================================================
+GET ALL GROUPS
+=================================================
+*/
+
+export const getAllGroupsService =
+async () => {
+
+    const result =
+        await pool.query(
+            `
+            SELECT *
+            FROM housing_groups
+            ORDER BY id
+            `
+        );
+
+    return result.rows;
+
+};
+
+/*
+=================================================
+GET GROUP MEMBERS
+=================================================
+*/
+
+export const getGroupMembersService =
+async (groupId) => {
+
+    /*
+    ============================
+    CHECK GROUP EXISTS
+    ============================
+    */
+
+    const groupResult =
+        await pool.query(
+            `
+            SELECT *
+            FROM housing_groups
+            WHERE id = $1
+            `,
+            [groupId]
+        );
+
+    const group =
+        groupResult.rows[0];
+
+    if (!group) {
+
+        throw new Error(
+            "Group not found"
+        );
+
+    }
+
+    /*
+    ============================
+    GET MEMBERS
+    ============================
+    */
+
+    const membersResult =
+        await pool.query(
+            `
+            SELECT
+                id,
+                name,
+                roll_no,
+                email,
+                cgpa
+            FROM students
+            WHERE group_id = $1
+            ORDER BY id
+            `,
+            [groupId]
+        );
+
+    return {
+
+        group,
+        members: membersResult.rows
+
+    };
 
 };
