@@ -111,19 +111,24 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
         );
         const memberIds = membersRes.rows.map(r => r.id);
 
+        // ── Mark SHATTERED first (before unlinking) ───────────
+        // Prevents handle_primary_applicant_leave from auto-deleting
+        // the group when the last member is unlinked.
+        await client.query(
+            `UPDATE housing_groups SET status = 'SHATTERED' WHERE id = $1`,
+            [groupId]
+        );
+
         if (memberIds.length > 0) {
             await lockStudents(client, memberIds);
+            // Bypass group-lock trigger — engine has authority to dissolve groups
+            await client.query(`SET LOCAL app.bypass_group_lock = 'on'`);
             // Unlink all members — they can re-form
             await client.query(
                 `UPDATE students SET group_id = NULL WHERE id = ANY($1::int[])`,
                 [memberIds]
             );
         }
-
-        await client.query(
-            `UPDATE housing_groups SET status = 'SHATTERED' WHERE id = $1`,
-            [groupId]
-        );
 
         await logShatter({ groupId, groupSize, largestAvailableBeds, client });
     });

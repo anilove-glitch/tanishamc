@@ -72,16 +72,19 @@ export async function evaluate(batchId) {
             continue;
         }
 
-        // Check not already in next batch (duplicate guard)
-        const dupCheck = await pool.query(
-            `SELECT 1 FROM allocation_submissions
-             WHERE group_id = $1 AND batch_id = $2`,
-            [group.id, nextBatchId]
-        );
-        if (dupCheck.rowCount > 0) {
-            await logRolloverSkipped({ batchId, groupId: group.id, reason: 'Already in next batch' });
-            skipped++;
-            continue;
+        // Check not already migrated to next batch (duplicate guard)
+        // We compare the group's current batch_id, not submissions.
+        if (group.id) {
+            const currentBatchRes = await pool.query(
+                `SELECT batch_id FROM housing_groups WHERE id = $1`,
+                [group.id]
+            );
+            const currentBatchId = currentBatchRes.rows[0]?.batch_id;
+            if (currentBatchId === nextBatchId) {
+                await logRolloverSkipped({ batchId, groupId: group.id, reason: 'Already migrated to next batch' });
+                skipped++;
+                continue;
+            }
         }
 
         // Migrate group to next batch, increment rollover counter

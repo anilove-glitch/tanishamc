@@ -90,21 +90,26 @@ async function _penalizeGroup(groupId, batchId) {
         );
         const memberIds = membersRes.rows.map(r => r.id);
 
+        // ── Mark PENALIZED first (before unlinking) ────────────
+        // This ensures handle_primary_applicant_leave does NOT
+        // auto-delete the group when the last member is unlinked.
+        await client.query(
+            `UPDATE housing_groups SET status = 'PENALIZED' WHERE id = $1`,
+            [groupId]
+        );
+
         if (memberIds.length > 0) {
             await lockStudents(client, memberIds);
 
-            // Unlink members from group (all-or-nothing)
+            // Bypass group-lock trigger — engine has authority to dissolve groups
+            await client.query(`SET LOCAL app.bypass_group_lock = 'on'`);
+
+            // Unlink all members — they can re-form
             await client.query(
                 `UPDATE students SET group_id = NULL WHERE id = ANY($1::int[])`,
                 [memberIds]
             );
         }
-
-        // Mark group as PENALIZED
-        await client.query(
-            `UPDATE housing_groups SET status = 'PENALIZED' WHERE id = $1`,
-            [groupId]
-        );
 
         await logGhostPenalty({ batchId, groupId, memberIds, client });
     });

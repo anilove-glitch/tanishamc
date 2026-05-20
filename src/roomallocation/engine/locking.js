@@ -18,8 +18,9 @@
 
 import pool from '../../db/pool.js';
 
-const MAX_RETRIES  = 3;
-const RETRY_BASE_MS = 80; // exponential back-off base
+const IS_TEST     = process.env.NODE_ENV === 'test';
+const MAX_RETRIES  = IS_TEST ? 1 : 3;
+const RETRY_BASE_MS = IS_TEST ? 20 : 80; // exponential back-off base
 
 // ─────────────────────────────────────────────────────────
 // UTILITIES
@@ -65,6 +66,10 @@ export async function withTransaction(callback, {
         try {
             await client.query(`BEGIN ISOLATION LEVEL ${isolationLevel}`);
             const result = await callback(client);
+            // Force deferred constraints to fire NOW (inside the transaction)
+            // so any trigger exceptions are caught here rather than at COMMIT,
+            // where they would cause a silent rollback from the caller's view.
+            await client.query('SET CONSTRAINTS ALL IMMEDIATE');
             await client.query('COMMIT');
             return result;
 

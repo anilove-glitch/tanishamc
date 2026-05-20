@@ -20,7 +20,6 @@ import pool from '../../db/pool.js';
 // ─────────────────────────────────────────────────────────
 
 async function _write(type, payload, client) {
-    const db = client ?? pool;
     const entry = {
         type,
         ...payload,
@@ -30,17 +29,20 @@ async function _write(type, payload, client) {
     // Console always — zero risk
     console.log(`[allocationLogger] ${type}`, entry);
 
-    // Try to persist to DB if the audit table exists
+    // Persist to DB using pool (NOT the caller's transaction client).
+    // Reason: if allocation_logs table doesn't exist and we use the
+    // transaction client, the failing INSERT poisons the connection and
+    // silently aborts the caller's transaction. Pool gets a fresh
+    // connection each time, so a missing table is fully harmless.
     try {
-        await db.query(
+        await pool.query(
             `INSERT INTO allocation_logs (event_type, payload, logged_at)
              VALUES ($1, $2, NOW())
              ON CONFLICT DO NOTHING`,
             [type, JSON.stringify(payload)]
         );
     } catch {
-        // Table may not exist yet — that's fine.
-        // Console output above is the fallback.
+        // Table may not exist yet — console output above is the fallback.
     }
 }
 
