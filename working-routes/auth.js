@@ -5,9 +5,7 @@ import auth from '../src/middleware/middleware.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-
 const router = express.Router();
-
 
 const ROLE_TABLES = {
     student: 'student',
@@ -151,8 +149,15 @@ router.post('/signup', async (req, res) => {
 
         const token = jwt.sign({ id: user.id, email: user.email, role: data.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
         return res.status(201).json({ message: 'User created successfully', user, token });
+        
     } catch (err) {
         console.error(err);
+        
+        // This catches the PostgreSQL unique constraint violation (duplicate email)
+        if (err.code === '23505') {
+            return res.status(409).json({ message: 'A user with this email already exists.' });
+        }
+
         return res.status(500).json({ message: 'Internal server error' });
     }
 });
