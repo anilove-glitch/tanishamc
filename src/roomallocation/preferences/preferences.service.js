@@ -96,3 +96,45 @@ async (
     return result.rows[0];
 
 };
+
+/*
+=================================================
+GET ALL ROOMS
+=================================================
+*/
+
+export const getAllRoomsService =
+async () => {
+
+    const result =
+        await pool.query(
+            `
+            SELECT *
+            FROM rooms
+            `
+        );
+
+    return result.rows;
+
+};
+
+/*
+=================================================
+GET ALL GROUPS
+=================================================
+*/
+
+export const getAllGroupsService =
+async () => {
+
+    const result =
+        await pool.query(
+            `
+            SELECT *
+            FROM housing_groups
+            `
+        );
+
+    return result.rows;
+
+};

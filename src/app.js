@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import outpassRoutes from "./routes/outpass.routes.js";
 import pool from "./db/pool.js";
 import groupRoutes from "./roomallocation/groups/groups.routes.js";
-
+import allocationRoutes from "./roomallocation/allocation.routes.js";
 const app = express();
 
 /*
@@ -26,7 +26,7 @@ app.use(
     "/api/groups",
     groupRoutes
 );
-
+app.use("/api/allocation", allocationRoutes);
 /*
 =================================================
 TEST ROUTES

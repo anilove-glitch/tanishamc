@@ -6,6 +6,8 @@ import outpassRoutes from './working-routes/outpass.js';
 import groupRoutes from './src/roomallocation/groups/groups.routes.js';
 import roomRoutes from './src/roomallocation/rooms/rooms.routes.js';
 import hostelRoutes from './src/roomallocation/hostels/hostels.routes.js';
+import preferenceRoutes from './src/roomallocation/preferences/preferences.routes.js';
+import allocationRoutes from './src/roomallocation/allocation.routes.js';
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -27,6 +29,8 @@ app.use('/outpass', outpassRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/hostels', hostelRoutes);
+app.use('/api/preferences', preferenceRoutes);
+app.use('/api/allocation', allocationRoutes);
 
 
 app.get('/', (req, res) => {
