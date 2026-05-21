@@ -5,6 +5,19 @@ import { execute as executeGhostPenalty } from '../engine/ghostPenalty.js';
 import { evaluate as evaluateShatter }  from '../engine/shatterProtocol.js';
 import { execute as executeFinalSweep } from '../engine/finalSweep.js';
 
+const GROUP_STATUS = {
+    FORMING: 'FORMING',
+    SOFT_LOCKED: 'SOFT_LOCKED',
+    HARD_LOCKED: 'HARD_LOCKED',
+    ALLOCATED: 'ALLOCATED',
+    SHATTERED: 'SHATTERED',
+    PENALIZED: 'PENALIZED'
+};
+
+const SYSTEM_PHASES = {
+    LIVE_BATCHES: 'LIVE_BATCHES'
+};
+
 const rolloverEvaluator  = { evaluate: evaluateRollovers };
 const ghostPenalty       = { execute:  executeGhostPenalty };
 const shatterProtocol    = { evaluate: (groupId) => evaluateShatter(groupId) };
