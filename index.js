@@ -32,131 +32,49 @@ app.use('/api/hostels', hostelRoutes);
 app.use('/api/preferences', preferenceRoutes);
 app.use('/api/allocation', allocationRoutes);
 
-
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
 
 app.get('/add-student', async (req, res) => {
-
     try {
-
         const query = `
-            INSERT INTO students (
-                name,
-                roll_no,
-                email,
-                password_hash,
-                cgpa
-            )
-            VALUES (
-                'Student2',
-                '24BMA002',
-                'student2@gmail.com',
-                'test123',
-                9.1
-            )
+            INSERT INTO students (name, roll_no, email, password_hash, cgpa)
+            VALUES ('Student2', '24BMA002', 'student2@gmail.com', 'test123', 9.1)
             RETURNING *;
         `;
-
-        const result =
-            await pool.query(query);
-
-        res.json({
-            success: true,
-            student: result.rows[0]
-        });
-
+        const result = await pool.query(query);
+        res.json({ success: true, student: result.rows[0] });
     } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+        res.status(500).json({ success: false, message: error.message });
     }
-
 });
 
 app.get('/groups', async (req, res) => {
-
     try {
-
-        const result =
-            await pool.query(`
-                SELECT *
-                FROM housing_groups
-            `);
-
-        res.json({
-            success: true,
-            groups: result.rows
-        });
-
+        const result = await pool.query(`SELECT * FROM housing_groups`);
+        res.json({ success: true, groups: result.rows });
     } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+        res.status(500).json({ success: false, message: error.message });
     }
-
 });
 
 app.get('/requests', async (req, res) => {
-
     try {
-
-        const result =
-            await pool.query(`
-                SELECT *
-                FROM group_requests
-            `);
-
-        res.json({
-            success: true,
-            requests: result.rows
-        });
-
+        const result = await pool.query(`SELECT * FROM group_requests`);
+        res.json({ success: true, requests: result.rows });
     } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+        res.status(500).json({ success: false, message: error.message });
     }
-
 });
 
 app.get('/students', async (req, res) => {
-
     try {
-
-        const result =
-            await pool.query(`
-                SELECT
-                    id,
-                    name,
-                    group_id
-                FROM students
-            `);
-
-        res.json({
-            success: true,
-            students: result.rows
-        });
-
+        const result = await pool.query(`SELECT id, name, group_id FROM students`);
+        res.json({ success: true, students: result.rows });
     } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+        res.status(500).json({ success: false, message: error.message });
     }
-
 });
 
 app.listen(port, () => {

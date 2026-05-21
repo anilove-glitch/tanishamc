@@ -6,34 +6,17 @@ import outpassRoutes from "./routes/outpass.routes.js";
 import pool from "./db/pool.js";
 import groupRoutes from "./roomallocation/groups/groups.routes.js";
 import allocationRoutes from "./roomallocation/allocation.routes.js";
+
 const app = express();
 
-/*
-=================================================
-MIDDLEWARES
-=================================================
-*/
-
-
 app.use(express.json());
-
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
-
-
 app.use(cookieParser());
-app.use(
-    "/api/groups",
-    groupRoutes
-);
-app.use("/api/allocation", allocationRoutes);
-/*
-=================================================
-TEST ROUTES
-=================================================
-*/
 
-// Health Check
+app.use("/api/groups", groupRoutes);
+app.use("/api/allocation", allocationRoutes);
+
 app.get("/", (req, res) => {
     res.status(200).json({
         success: true,
@@ -43,28 +26,18 @@ app.get("/", (req, res) => {
 
 app.post("/debug", (req, res) => {
     console.log(req.body);
-
-    res.json({
-        body: req.body
-    });
+    res.json({ body: req.body });
 });
 
-// PostgreSQL Connection Test
 app.get("/test-db", async (req, res) => {
     try {
-
-        const result = await pool.query(
-            "SELECT NOW()"
-        );
-
+        const result = await pool.query("SELECT NOW()");
         return res.status(200).json({
             success: true,
             message: "Database connected successfully",
             data: result.rows
         });
-
     } catch (error) {
-
         return res.status(500).json({
             success: false,
             message: error.message
@@ -72,31 +45,14 @@ app.get("/test-db", async (req, res) => {
     }
 });
 
-/*
-=================================================
-API ROUTES
-=================================================
-*/
-
-app.use(
-    "/api/outpasses",
-    outpassRoutes
-);
-
-/*
-=================================================
-GLOBAL ERROR HANDLER
-=================================================
-*/
+app.use("/api/outpasses", outpassRoutes);
 
 app.use((err, req, res, next) => {
-
     return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message || "Internal Server Error",
         errors: err.errors || []
     });
-
 });
 
 export default app;
