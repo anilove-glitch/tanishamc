@@ -12,6 +12,7 @@
     "test:api": "node src/roomallocation/db/test-api.js"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
