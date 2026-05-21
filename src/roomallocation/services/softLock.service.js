@@ -8,7 +8,7 @@
  *   2. Joins to get each group's leader (primary_applicant_id) individual_rank
  *   3. Sorts groups by leader rank ASC (lower rank = higher CGPA priority)
  *   4. Assigns groups to existing PENDING batches in chunks of BATCH_SIZE (50)
- *   5. Sets housing_groups.status = 'SOFT_LOCKED' and housing_groups.batch_id
+ *   5. Sets housing_group.status = 'SOFT_LOCKED' and housing_group.batch_id
  *
  * Preconditions:
  *   - Batches must already exist in the batches table (created by admin).
@@ -40,11 +40,11 @@ export async function assignGroupsToBatches(hostelId) {
         // 1. Fetch all FORMING groups with their leader's rank
         const groupsRes = await client.query(
             `SELECT hg.id, s.individual_rank AS leader_rank
-             FROM housing_groups hg
-             JOIN students s ON s.id = hg.primary_applicant_id
+             FROM housing_group hg
+             JOIN student s ON s.id = hg.primary_applicant_id
              WHERE hg.status = 'FORMING'
                AND EXISTS (
-                   SELECT 1 FROM batches b
+                   SELECT 1 FROM batch b
                    WHERE b.hostel_id = $1
                )
              ORDER BY s.individual_rank ASC NULLS LAST`,
@@ -59,7 +59,7 @@ export async function assignGroupsToBatches(hostelId) {
 
         // 2. Fetch PENDING batches for this hostel, ordered by batch_number ASC
         const batchesRes = await client.query(
-            `SELECT id, batch_number FROM batches
+            `SELECT id, batch_number FROM batch
              WHERE hostel_id = $1 AND status = 'PENDING'
              ORDER BY batch_number ASC`,
             [hostelId]
@@ -94,7 +94,7 @@ export async function assignGroupsToBatches(hostelId) {
             }
 
             await client.query(
-                `UPDATE housing_groups
+                `UPDATE housing_group
                  SET status   = 'SOFT_LOCKED',
                      batch_id = $1
                  WHERE id = $2

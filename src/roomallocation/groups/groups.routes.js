@@ -1,4 +1,5 @@
 import express from "express";
+import auth from "../../middleware/middleware.js";
 
 import {
     createGroupController,
@@ -11,8 +12,8 @@ import {
     getGroupMembersController
 } from "./groups.controller.js";
 
-const router =
-    express.Router();
+const router = express.Router();
+router.use(auth);
 
 /*
 =================================================

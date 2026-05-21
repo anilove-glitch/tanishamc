@@ -82,7 +82,7 @@ export async function checkShatteredGroups(batchId) {
     console.log(`[evaluationScheduler] Checking shattered groups for batch ${batchId}`);
     try {
         const groupsRes = await pool.query(
-            `SELECT hg.id FROM housing_groups hg
+            `SELECT hg.id FROM housing_group hg
              WHERE hg.batch_id = $1
                AND hg.status NOT IN ('ALLOCATED', 'SHATTERED', 'PENALIZED')`,
             [batchId]
@@ -134,9 +134,9 @@ export async function recalculateGroupRanks(hostelId) {
     // Check if any re-formed groups exist with no rank
     const unrankedRes = await pool.query(
         `SELECT hg.id, s.individual_rank AS leader_rank
-         FROM housing_groups hg
-         JOIN students s ON s.id = hg.primary_applicant_id
-         JOIN batches b ON hg.batch_id = b.id
+         FROM housing_group hg
+         JOIN student s ON s.id = hg.primary_applicant_id
+         JOIN batch b ON hg.batch_id = b.id
          WHERE b.hostel_id = $1
            AND hg.group_rank IS NULL
            AND hg.status NOT IN ('ALLOCATED', 'SHATTERED', 'PENALIZED', 'FORMING')`,
@@ -151,7 +151,7 @@ export async function recalculateGroupRanks(hostelId) {
 
     // Find the currently ACTIVE batch for this hostel — re-formed groups need to join it
     const activeBatchRes = await pool.query(
-        `SELECT id FROM batches WHERE hostel_id = $1 AND status = 'ACTIVE' LIMIT 1`,
+        `SELECT id FROM batch WHERE hostel_id = $1 AND status = 'ACTIVE' LIMIT 1`,
         [hostelId]
     );
     const activeBatchId = activeBatchRes.rows[0]?.id ?? null;
@@ -161,7 +161,7 @@ export async function recalculateGroupRanks(hostelId) {
         if (group.leader_rank === null) continue;
 
         await pool.query(
-            `UPDATE housing_groups
+            `UPDATE housing_group
              SET group_rank = $1
                ${activeBatchId ? ', batch_id = $3' : ''}
              WHERE id = $2 AND group_rank IS NULL`,
@@ -246,7 +246,7 @@ export async function runPostBatchEvaluation(batchId, hostelId) {
         // A batch is "over" when its status is neither PENDING nor ACTIVE.
         // Final sweep fires only when zero batches remain in those states.
         const remainingRes = await pool.query(
-            `SELECT 1 FROM batches
+            `SELECT 1 FROM batch
              WHERE hostel_id = $1
                AND status IN ('PENDING', 'ACTIVE')
              LIMIT 1`,

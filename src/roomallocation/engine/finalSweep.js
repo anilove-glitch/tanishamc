@@ -41,11 +41,11 @@ export async function execute(hostelId) {
     // (students whose allocated_room_id is null and is_allotted = false)
     const studentsRes = await pool.query(
         `SELECT s.id, s.name, s.roll_no, s.individual_rank
-         FROM students s
+         FROM student s
          WHERE s.is_allotted = false
            AND EXISTS (
-               SELECT 1 FROM housing_groups hg
-               JOIN batches b ON hg.batch_id = b.id
+               SELECT 1 FROM housing_group hg
+               JOIN batch b ON hg.batch_id = b.id
                WHERE hg.id = s.group_id
                  AND b.hostel_id = $1
            )
@@ -57,7 +57,7 @@ export async function execute(hostelId) {
     // (shattered / penalized members)
     const orphanRes = await pool.query(
         `SELECT s.id, s.name, s.roll_no, s.individual_rank
-         FROM students s
+         FROM student s
          WHERE s.is_allotted = false
            AND s.group_id IS NULL
            AND s.physical_room_id IS NULL
@@ -99,7 +99,7 @@ export async function execute(hostelId) {
 async function _assignStudentToRoom(student, hostelId) {
     // Idempotency: re-check if already assigned
     const freshCheck = await pool.query(
-        `SELECT is_allotted FROM students WHERE id = $1`,
+        `SELECT is_allotted FROM student WHERE id = $1`,
         [student.id]
     );
     if (freshCheck.rows[0]?.is_allotted) {
@@ -109,7 +109,7 @@ async function _assignStudentToRoom(student, hostelId) {
     // Fetch available rooms, sorted tightest-first to minimise waste
     const roomsRes = await pool.query(
         `SELECT id, max_capacity, current_occupancy
-         FROM rooms
+         FROM room
          WHERE hostel_id = $1
            AND current_occupancy < max_capacity
          ORDER BY (max_capacity - current_occupancy) ASC, id ASC`,
@@ -135,14 +135,14 @@ async function _assignStudentToRoom(student, hostelId) {
 
                 // Re-verify student not assigned (race guard)
                 const studentCheck = await client.query(
-                    `SELECT is_allotted FROM students WHERE id = $1 FOR UPDATE`,
+                    `SELECT is_allotted FROM student WHERE id = $1 FOR UPDATE`,
                     [student.id]
                 );
                 if (studentCheck.rows[0]?.is_allotted) return false;
 
                 // Insert assignment
                 await client.query(
-                    `INSERT INTO room_assignments
+                    `INSERT INTO room_assignment
                         (room_id, student_id, assigned_by, assignment_status)
                      VALUES ($1, $2, 'FINAL_SWEEP', 'UPCOMING')`,
                     [room.id, student.id]
@@ -151,7 +151,7 @@ async function _assignStudentToRoom(student, hostelId) {
 
                 // Update student record
                 await client.query(
-                    `UPDATE students
+                    `UPDATE student
                      SET is_allotted = true, allocated_room_id = $1
                      WHERE id = $2`,
                     [room.id, student.id]

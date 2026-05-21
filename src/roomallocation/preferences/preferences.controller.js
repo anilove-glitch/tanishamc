@@ -6,8 +6,8 @@ import { allocationService } from '../services/allocation.service.js';
 =================================================
 SUBMIT ROOM PREFERENCE
   (redirected to allocation.service.submitPreferences
-   which writes to allocation_submissions +
-   submission_preferences — the actual DB tables)
+   which writes to allocation_submission +
+   submission_preference — the actual DB tables)
 =================================================
 */
 

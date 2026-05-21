@@ -34,7 +34,7 @@ const VALID_TRANSITIONS = {
  */
 export const getCurrentPhase = async (hostelId) => {
     const result = await pool.query(
-        `SELECT id, name, current_phase, is_paused FROM hostels WHERE id = $1`,
+        `SELECT id, name, current_phase, is_paused FROM hostel WHERE id = $1`,
         [hostelId]
     );
     if (result.rows.length === 0) throw new ApiError(404, 'Hostel not found');
@@ -65,7 +65,7 @@ export const setCurrentPhase = async (hostelId, newPhase) => {
     }
 
     const result = await pool.query(
-        `UPDATE hostels SET current_phase = $1 WHERE id = $2 RETURNING *`,
+        `UPDATE hostel SET current_phase = $1 WHERE id = $2 RETURNING *`,
         [newPhase, hostelId]
     );
 
@@ -88,7 +88,7 @@ export const setCurrentPhase = async (hostelId, newPhase) => {
  */
 export const pauseAllocation = async (hostelId) => {
     const result = await pool.query(
-        `UPDATE hostels SET is_paused = TRUE WHERE id = $1 RETURNING id, name, current_phase, is_paused`,
+        `UPDATE hostel SET is_paused = TRUE WHERE id = $1 RETURNING id, name, current_phase, is_paused`,
         [hostelId]
     );
     if (result.rows.length === 0) throw new ApiError(404, 'Hostel not found');
@@ -100,7 +100,7 @@ export const pauseAllocation = async (hostelId) => {
  */
 export const resumeAllocation = async (hostelId) => {
     const result = await pool.query(
-        `UPDATE hostels SET is_paused = FALSE WHERE id = $1 RETURNING id, name, current_phase, is_paused`,
+        `UPDATE hostel SET is_paused = FALSE WHERE id = $1 RETURNING id, name, current_phase, is_paused`,
         [hostelId]
     );
     if (result.rows.length === 0) throw new ApiError(404, 'Hostel not found');

@@ -85,7 +85,7 @@ export function isRoomFull(room) {
  * Returns null if no preference is satisfiable.
  *
  * @param {{ room_id: string, preference_order: number }[]} preferences
- *     Sorted by preference_order ASC (as stored in submission_preferences)
+ *     Sorted by preference_order ASC (as stored in submission_preference)
  * @param {Map<string, object>} lockedRooms
  *     Map of roomId → fresh DB room record (already locked FOR UPDATE by caller)
  * @param {number} groupSize

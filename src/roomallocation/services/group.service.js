@@ -10,20 +10,20 @@ export const createGroup = async (primaryApplicantId) => {
         await client.query('BEGIN');
 
         // Check if student already in a group
-        const studentRes = await client.query(`SELECT group_id FROM students WHERE id = $1`, [primaryApplicantId]);
+        const studentRes = await client.query(`SELECT group_id FROM student WHERE id = $1`, [primaryApplicantId]);
         if (studentRes.rows.length === 0) throw new ApiError(404, 'Student not found');
         if (studentRes.rows[0].group_id) throw new ApiError(400, 'Student is already in a group');
 
         // Create group
         const groupRes = await client.query(
-            `INSERT INTO housing_groups (primary_applicant_id, status) VALUES ($1, 'FORMING') RETURNING *`,
+            `INSERT INTO housing_group (primary_applicant_id, status) VALUES ($1, 'FORMING') RETURNING *`,
             [primaryApplicantId]
         );
         const group = groupRes.rows[0];
 
         // Update student
         await client.query(
-            `UPDATE students SET group_id = $1 WHERE id = $2`,
+            `UPDATE student SET group_id = $1 WHERE id = $2`,
             [group.id, primaryApplicantId]
         );
 
@@ -48,7 +48,7 @@ export const getGroupDetails = async (groupId) => {
 
         const membersRes = await pool.query(
             `SELECT id, name, roll_no, department, individual_rank 
-             FROM students WHERE group_id = $1`,
+             FROM student WHERE group_id = $1`,
             [groupId]
         );
 
@@ -69,24 +69,24 @@ export const getGroupDetails = async (groupId) => {
 export const sendGroupRequest = async (groupId, studentId, requestType) => {
     try {
         // Check if student is already in a group
-        const studentRes = await pool.query(`SELECT group_id FROM students WHERE id = $1`, [studentId]);
+        const studentRes = await pool.query(`SELECT group_id FROM student WHERE id = $1`, [studentId]);
         if (studentRes.rows.length === 0) throw new ApiError(404, 'Student not found');
         if (studentRes.rows[0].group_id) throw new ApiError(400, 'Student is already in a group');
 
         // Check if group exists and is FORMING
-        const groupRes = await pool.query(`SELECT status FROM housing_groups WHERE id = $1`, [groupId]);
+        const groupRes = await pool.query(`SELECT status FROM housing_group WHERE id = $1`, [groupId]);
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
         if (groupRes.rows[0].status !== 'FORMING') throw new ApiError(400, 'Group is not accepting members');
 
         // Check for existing pending request
         const existingReq = await pool.query(
-            `SELECT id FROM group_requests WHERE group_id = $1 AND student_id = $2 AND status = 'PENDING'`,
+            `SELECT id FROM group_request WHERE group_id = $1 AND student_id = $2 AND status = 'PENDING'`,
             [groupId, studentId]
         );
         if (existingReq.rows.length > 0) throw new ApiError(400, 'A pending request already exists between this group and student');
 
         const result = await pool.query(
-            `INSERT INTO group_requests (group_id, student_id, request_type, status) 
+            `INSERT INTO group_request (group_id, student_id, request_type, status) 
              VALUES ($1, $2, $3, 'PENDING') RETURNING *`,
             [groupId, studentId, requestType]
         );
@@ -107,7 +107,7 @@ export const respondToGroupRequest = async (requestId, status) => {
         await client.query('BEGIN');
 
         // Get request details
-        const reqRes = await client.query(`SELECT * FROM group_requests WHERE id = $1 FOR UPDATE`, [requestId]);
+        const reqRes = await client.query(`SELECT * FROM group_request WHERE id = $1 FOR UPDATE`, [requestId]);
         if (reqRes.rows.length === 0) throw new ApiError(404, 'Request not found');
         const request = reqRes.rows[0];
 
@@ -115,7 +115,7 @@ export const respondToGroupRequest = async (requestId, status) => {
 
         // Update request status
         const updateRes = await client.query(
-            `UPDATE group_requests SET status = $1 WHERE id = $2 RETURNING *`,
+            `UPDATE group_request SET status = $1 WHERE id = $2 RETURNING *`,
             [status, requestId]
         );
 
@@ -124,8 +124,8 @@ export const respondToGroupRequest = async (requestId, status) => {
             // Verify group status — Phase 2 top-up gate
             const groupRes = await client.query(
                 `SELECT hg.status,
-                        (SELECT COUNT(*) FROM students s WHERE s.group_id = hg.id) AS member_count
-                 FROM housing_groups hg
+                        (SELECT COUNT(*) FROM student s WHERE s.group_id = hg.id) AS member_count
+                 FROM housing_group hg
                  WHERE hg.id = $1`,
                 [request.group_id]
             );
@@ -146,21 +146,21 @@ export const respondToGroupRequest = async (requestId, status) => {
             }
 
             // Re-verify student isn't in a group (race condition check)
-            const studentCheck = await client.query(`SELECT group_id FROM students WHERE id = $1`, [request.student_id]);
+            const studentCheck = await client.query(`SELECT group_id FROM student WHERE id = $1`, [request.student_id]);
             if (studentCheck.rows[0].group_id) {
-                await client.query(`UPDATE group_requests SET status = 'CANCELED' WHERE id = $1`, [requestId]);
+                await client.query(`UPDATE group_request SET status = 'CANCELED' WHERE id = $1`, [requestId]);
                 throw new ApiError(400, 'Student joined another group. Request auto-canceled.');
             }
 
             // Note: The check_group_capacity trigger in DB will throw if group is full (>=4)
             await client.query(
-                `UPDATE students SET group_id = $1 WHERE id = $2`,
+                `UPDATE student SET group_id = $1 WHERE id = $2`,
                 [request.group_id, request.student_id]
             );
 
             // Auto-cancel other PENDING requests for this student
             await client.query(
-                `UPDATE group_requests
+                `UPDATE group_request
                  SET status = 'CANCELED'
                  WHERE student_id = $1
                    AND status = 'PENDING'
@@ -194,7 +194,7 @@ export const leaveGroup = async (studentId) => {
 
         // 1. Verify student exists and is in a group
         const studentRes = await client.query(
-            `SELECT id, group_id FROM students WHERE id = $1 FOR UPDATE`,
+            `SELECT id, group_id FROM student WHERE id = $1 FOR UPDATE`,
             [studentId]
         );
         if (studentRes.rows.length === 0) throw new ApiError(404, 'Student not found');
@@ -203,7 +203,7 @@ export const leaveGroup = async (studentId) => {
 
         // 2. Verify group exists and is in a mutable state
         const groupRes = await client.query(
-            `SELECT id, status FROM housing_groups WHERE id = $1`,
+            `SELECT id, status FROM housing_group WHERE id = $1`,
             [student.group_id]
         );
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
@@ -216,7 +216,7 @@ export const leaveGroup = async (studentId) => {
 
         // 3. Perform the leave — triggers handle leader reassignment/group deletion
         await client.query(
-            `UPDATE students SET group_id = NULL WHERE id = $1`,
+            `UPDATE student SET group_id = NULL WHERE id = $1`,
             [studentId]
         );
 
@@ -237,7 +237,7 @@ export const leaveGroup = async (studentId) => {
 export const updateGroupStatus = async (groupId, status) => {
     try {
         const result = await pool.query(
-            `UPDATE housing_groups SET status = $1 WHERE id = $2 RETURNING *`,
+            `UPDATE housing_group SET status = $1 WHERE id = $2 RETURNING *`,
             [status, groupId]
         );
         if (result.rows.length === 0) throw new ApiError(404, 'Group not found');
@@ -254,7 +254,7 @@ export const updateGroupStatus = async (groupId, status) => {
 export const getAllRequests = async () => {
     try {
         const result = await pool.query(
-            `SELECT * FROM group_requests ORDER BY created_at DESC`
+            `SELECT * FROM group_request ORDER BY created_at DESC`
         );
         return result.rows;
     } catch (error) {
@@ -289,7 +289,7 @@ export const getGroupMembers = async (groupId) => {
 
         const membersRes = await pool.query(
             `SELECT id, name, roll_no, email, individual_rank
-             FROM students
+             FROM student
              WHERE group_id = $1
              ORDER BY individual_rank ASC`,
             [groupId]
@@ -315,7 +315,7 @@ export const transferLeadership = async (groupId, newLeaderId) => {
 
         // Verify group exists and is in a mutable state
         const groupRes = await client.query(
-            `SELECT id, status FROM housing_groups WHERE id = $1`,
+            `SELECT id, status FROM housing_group WHERE id = $1`,
             [groupId]
         );
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
@@ -330,7 +330,7 @@ export const transferLeadership = async (groupId, newLeaderId) => {
 
         // Verify new leader is a member of this group
         const memberRes = await client.query(
-            `SELECT id FROM students WHERE id = $1 AND group_id = $2`,
+            `SELECT id FROM student WHERE id = $1 AND group_id = $2`,
             [newLeaderId, groupId]
         );
         if (memberRes.rows.length === 0) {
@@ -338,7 +338,7 @@ export const transferLeadership = async (groupId, newLeaderId) => {
         }
 
         const updated = await client.query(
-            `UPDATE housing_groups SET primary_applicant_id = $1 WHERE id = $2 RETURNING *`,
+            `UPDATE housing_group SET primary_applicant_id = $1 WHERE id = $2 RETURNING *`,
             [newLeaderId, groupId]
         );
 

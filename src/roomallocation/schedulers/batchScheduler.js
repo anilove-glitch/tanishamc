@@ -54,8 +54,8 @@ export async function recoverOnBoot() {
     // 1. Resume any currently ACTIVE batch
     const activeRes = await pool.query(
         `SELECT b.*, h.current_phase, h.is_paused
-         FROM batches b
-         JOIN hostels h ON b.hostel_id = h.id
+         FROM batch b
+         JOIN hostel h ON b.hostel_id = h.id
          WHERE b.status = 'ACTIVE'`
     );
 
@@ -81,7 +81,7 @@ export async function recoverOnBoot() {
 
     // 2. Arm start timers for all pending batches
     const pendingRes = await pool.query(
-        `SELECT * FROM batches WHERE status = 'PENDING' ORDER BY start_time ASC`
+        `SELECT * FROM batch WHERE status = 'PENDING' ORDER BY start_time ASC`
     );
 
     for (const batch of pendingRes.rows) {
@@ -153,7 +153,7 @@ function _armEndTimer(batch) {
  */
 export async function startBatch(batchId) {
     const batchRes = await pool.query(
-        `UPDATE batches SET status = 'ACTIVE' WHERE id = $1 AND status = 'PENDING' RETURNING *`,
+        `UPDATE batch SET status = 'ACTIVE' WHERE id = $1 AND status = 'PENDING' RETURNING *`,
         [batchId]
     );
 
@@ -169,7 +169,7 @@ export async function startBatch(batchId) {
     // All SOFT_LOCKED groups assigned to this batch are immediately
     // HARD_LOCKED: no new members can be accepted from this point.
     const hardLockRes = await pool.query(
-        `UPDATE housing_groups
+        `UPDATE housing_group
          SET status = 'HARD_LOCKED'
          WHERE batch_id = $1
            AND status = 'SOFT_LOCKED'`,
@@ -210,7 +210,7 @@ export async function startBatch(batchId) {
  */
 export async function endBatch(batchId) {
     const batchRes = await pool.query(
-        `UPDATE batches SET status = 'COMPLETED' WHERE id = $1 AND status = 'ACTIVE' RETURNING *`,
+        `UPDATE batch SET status = 'COMPLETED' WHERE id = $1 AND status = 'ACTIVE' RETURNING *`,
         [batchId]
     );
 
@@ -260,7 +260,7 @@ export async function endBatch(batchId) {
  */
 export async function activateNextBatch(hostelId, completedBatchNumber) {
     const nextRes = await pool.query(
-        `SELECT * FROM batches
+        `SELECT * FROM batch
          WHERE hostel_id = $1
            AND status = 'PENDING'
            AND batch_number > $2
@@ -302,7 +302,7 @@ export async function activateNextBatch(hostelId, completedBatchNumber) {
 export async function transitionSystemPhase(hostelId, targetPhase) {
     try {
         const hostelRes = await pool.query(
-            `SELECT current_phase FROM hostels WHERE id = $1`,
+            `SELECT current_phase FROM hostel WHERE id = $1`,
             [hostelId]
         );
 
@@ -325,7 +325,7 @@ export async function transitionSystemPhase(hostelId, targetPhase) {
  * Creates start/end timers immediately.
  */
 export async function scheduleBatch(batchId) {
-    const res = await pool.query(`SELECT * FROM batches WHERE id = $1`, [batchId]);
+    const res = await pool.query(`SELECT * FROM batch WHERE id = $1`, [batchId]);
     if (res.rowCount === 0) throw new Error(`Batch ${batchId} not found`);
     _armStartTimer(res.rows[0]);
 }

@@ -34,11 +34,11 @@ export async function execute(batchId) {
     // but submitted ZERO rounds during the batch
     const ghostRes = await pool.query(
         `SELECT hg.id, hg.status
-         FROM housing_groups hg
+         FROM housing_group hg
          WHERE hg.batch_id = $1
            AND hg.status IN ('SOFT_LOCKED', 'HARD_LOCKED', 'FORMING')
            AND NOT EXISTS (
-               SELECT 1 FROM allocation_submissions asb
+               SELECT 1 FROM allocation_submission asb
                WHERE asb.group_id = hg.id
                  AND asb.batch_id = $1
            )`,
@@ -78,14 +78,14 @@ async function _penalizeGroup(groupId, batchId) {
 
         // Double-check: any submissions exist?
         const subCheck = await client.query(
-            `SELECT 1 FROM allocation_submissions WHERE group_id = $1 AND batch_id = $2 LIMIT 1`,
+            `SELECT 1 FROM allocation_submission WHERE group_id = $1 AND batch_id = $2 LIMIT 1`,
             [groupId, batchId]
         );
         if (subCheck.rowCount > 0) return; // Not a ghost — submitted at least once
 
         // Fetch and lock members
         const membersRes = await client.query(
-            `SELECT id FROM students WHERE group_id = $1 ORDER BY id ASC`,
+            `SELECT id FROM student WHERE group_id = $1 ORDER BY id ASC`,
             [groupId]
         );
         const memberIds = membersRes.rows.map(r => r.id);
@@ -94,7 +94,7 @@ async function _penalizeGroup(groupId, batchId) {
         // This ensures handle_primary_applicant_leave does NOT
         // auto-delete the group when the last member is unlinked.
         await client.query(
-            `UPDATE housing_groups SET status = 'PENALIZED' WHERE id = $1`,
+            `UPDATE housing_group SET status = 'PENALIZED' WHERE id = $1`,
             [groupId]
         );
 
@@ -108,13 +108,13 @@ async function _penalizeGroup(groupId, batchId) {
             // finalSweep sorts by individual_rank ASC NULLS LAST, so NULL = end of queue.
             // This is the "demoted to the very end of the weekend" rule from the spec.
             await client.query(
-                `UPDATE students SET individual_rank = NULL WHERE id = ANY($1::int[])`,
+                `UPDATE student SET individual_rank = NULL WHERE id = ANY($1::int[])`,
                 [memberIds]
             );
 
             // Unlink all members — they can re-form, but as lowest priority
             await client.query(
-                `UPDATE students SET group_id = NULL WHERE id = ANY($1::int[])`,
+                `UPDATE student SET group_id = NULL WHERE id = ANY($1::int[])`,
                 [memberIds]
             );
         }

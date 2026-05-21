@@ -6,7 +6,7 @@
  * Performs:
  *   - Preference processing (in group-rank order)
  *   - Room locking (deterministic, deadlock-safe)
- *   - Room assignment (room_assignments INSERT)
+ *   - Room assignment (room_assignment INSERT)
  *   - Occupancy updates (via DB trigger)
  *   - Submission state updates (is_processed, allocation_result)
  *   - Student state updates (is_allotted, allocated_room_id)
@@ -105,7 +105,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
 
     // Skip already-processed submissions (idempotency guard)
     const alreadyDone = await pool.query(
-        `SELECT is_processed, allocation_result FROM allocation_submissions WHERE id = $1`,
+        `SELECT is_processed, allocation_result FROM allocation_submission WHERE id = $1`,
         [submissionId]
     );
     if (alreadyDone.rows[0]?.is_processed) {
@@ -141,7 +141,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
 
             // ── 2. Fetch group members ─────────────────────────
             const membersRes = await client.query(
-                `SELECT id FROM students WHERE group_id = $1 ORDER BY id ASC`,
+                `SELECT id FROM student WHERE group_id = $1 ORDER BY id ASC`,
                 [group_id]
             );
             const memberIds = membersRes.rows.map(r => r.id);
@@ -167,7 +167,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
             if (!selection) {
                 // Mark as FAILED — eligible for rollover evaluation
                 await client.query(
-                    `UPDATE allocation_submissions
+                    `UPDATE allocation_submission
                      SET is_processed = true, allocation_result = 'FAILED'
                      WHERE id = $1`,
                     [submissionId]
@@ -188,7 +188,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
             if (room.current_occupancy + actualGroupSize > room.max_capacity) {
                 // Race: room filled between preference submission and now
                 await client.query(
-                    `UPDATE allocation_submissions
+                    `UPDATE allocation_submission
                      SET is_processed = true, allocation_result = 'FAILED'
                      WHERE id = $1`,
                     [submissionId]
@@ -196,10 +196,10 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
                 return { submissionId, success: false, reason: 'Room filled during allocation (race)' };
             }
 
-            // ── 6. Create room_assignments for all members ─────
+            // ── 6. Create room_assignment for all members ─────
             for (const studentId of memberIds) {
                 await client.query(
-                    `INSERT INTO room_assignments
+                    `INSERT INTO room_assignment
                         (room_id, student_id, assigned_by, assignment_status)
                      VALUES ($1, $2, 'ALGORITHM', 'UPCOMING')`,
                     [room.id, studentId]
@@ -210,7 +210,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
 
             // ── 7. Update student records ──────────────────────
             await client.query(
-                `UPDATE students
+                `UPDATE student
                  SET is_allotted = true,
                      allocated_room_id = $1
                  WHERE id = ANY($2::int[])`,
@@ -219,7 +219,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
 
             // ── 8. Update group status ─────────────────────────
             await client.query(
-                `UPDATE housing_groups
+                `UPDATE housing_group
                  SET status = 'ALLOCATED'
                  WHERE id = $1`,
                 [group_id]
@@ -227,7 +227,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
 
             // ── 9. Mark submission as processed ───────────────
             await client.query(
-                `UPDATE allocation_submissions
+                `UPDATE allocation_submission
                  SET is_processed = true,
                      allocation_result = 'ALLOCATED'
                  WHERE id = $1`,
@@ -281,7 +281,7 @@ async function _processSubmission({ batchId, roundNumber, submission }) {
  */
 async function _markSubmission(submissionId, allocationResult) {
     await pool.query(
-        `UPDATE allocation_submissions
+        `UPDATE allocation_submission
          SET is_processed = true, allocation_result = $1
          WHERE id = $2 AND is_processed = false`,
         [allocationResult, submissionId]

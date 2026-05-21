@@ -32,7 +32,7 @@ import pool from '../../db/pool.js';
 export async function evaluate(batchId) {
     // 1. Find the next PENDING batch for the same hostel
     const batchRes = await pool.query(
-        `SELECT hostel_id, batch_number FROM batches WHERE id = $1`,
+        `SELECT hostel_id, batch_number FROM batch WHERE id = $1`,
         [batchId]
     );
     if (batchRes.rowCount === 0) throw new Error(`Batch ${batchId} not found`);
@@ -40,7 +40,7 @@ export async function evaluate(batchId) {
     const { hostel_id, batch_number } = batchRes.rows[0];
 
     const nextBatchRes = await pool.query(
-        `SELECT id FROM batches
+        `SELECT id FROM batch
          WHERE hostel_id = $1
            AND batch_number > $2
            AND status = 'PENDING'
@@ -53,8 +53,8 @@ export async function evaluate(batchId) {
     // 2. Find groups that submitted but failed in this batch
     const failedRes = await pool.query(
         `SELECT DISTINCT hg.id, hg.status, hg.rollover_count
-         FROM allocation_submissions asb
-         JOIN housing_groups hg ON asb.group_id = hg.id
+         FROM allocation_submission asb
+         JOIN housing_group hg ON asb.group_id = hg.id
          WHERE asb.batch_id = $1
            AND asb.allocation_result = 'FAILED'
            AND hg.status NOT IN ('ALLOCATED', 'SHATTERED', 'PENALIZED')`,
@@ -76,7 +76,7 @@ export async function evaluate(batchId) {
         // We compare the group's current batch_id, not submissions.
         if (group.id) {
             const currentBatchRes = await pool.query(
-                `SELECT batch_id FROM housing_groups WHERE id = $1`,
+                `SELECT batch_id FROM housing_group WHERE id = $1`,
                 [group.id]
             );
             const currentBatchId = currentBatchRes.rows[0]?.batch_id;
@@ -90,7 +90,7 @@ export async function evaluate(batchId) {
         // Migrate group to next batch, increment rollover counter
         await withTransaction(async (client) => {
             await client.query(
-                `UPDATE housing_groups
+                `UPDATE housing_group
                  SET batch_id           = $1,
                      rollover_count     = rollover_count + 1,
                      is_rollover_priority = true

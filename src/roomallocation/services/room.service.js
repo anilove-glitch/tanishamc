@@ -6,7 +6,7 @@ import ApiError from '../../utils/apiError.js';
  */
 export const getAllHostels = async () => {
     try {
-        const result = await pool.query(`SELECT * FROM hostels ORDER BY name ASC`);
+        const result = await pool.query(`SELECT * FROM hostel ORDER BY name ASC`);
         return result.rows;
     } catch (error) {
         throw new ApiError(500, 'Error fetching hostels: ' + error.message);
@@ -18,7 +18,7 @@ export const getAllHostels = async () => {
  */
 export const getHostelById = async (hostelId) => {
     try {
-        const result = await pool.query(`SELECT * FROM hostels WHERE id = $1`, [hostelId]);
+        const result = await pool.query(`SELECT * FROM hostel WHERE id = $1`, [hostelId]);
         if (result.rows.length === 0) {
             throw new ApiError(404, 'Hostel not found');
         }
@@ -39,7 +39,7 @@ export const getHostelById = async (hostelId) => {
 export const getRoomsByHostel = async (hostelId) => {
     try {
         const result = await pool.query(
-            `SELECT * FROM rooms WHERE hostel_id = $1 ORDER BY room_number ASC`,
+            `SELECT * FROM room WHERE hostel_id = $1 ORDER BY room_number ASC`,
             [hostelId]
         );
         return result.rows;
@@ -53,7 +53,7 @@ export const getRoomsByHostel = async (hostelId) => {
  */
 export const getRoomById = async (roomId) => {
     try {
-        const result = await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
+        const result = await pool.query(`SELECT * FROM room WHERE id = $1`, [roomId]);
         if (result.rows.length === 0) {
             throw new ApiError(404, 'Room not found');
         }
@@ -71,7 +71,7 @@ export const createHostel = async (name, type, totalCapacity) => {
     try {
         if (!name) throw new ApiError(400, 'Hostel name is required');
         const result = await pool.query(
-            `INSERT INTO hostels (name, type, total_capacity)
+            `INSERT INTO hostel (name, type, total_capacity)
              VALUES ($1, $2, $3)
              RETURNING *`,
             [name, type ?? null, totalCapacity ?? null]
@@ -95,7 +95,7 @@ export const createRoom = async (hostelId, roomNumber, roomType, maxCapacity) =>
             throw new ApiError(400, 'hostelId, roomNumber, and maxCapacity are required');
         }
         const result = await pool.query(
-            `INSERT INTO rooms (hostel_id, room_number, room_type, max_capacity)
+            `INSERT INTO room (hostel_id, room_number, room_type, max_capacity)
              VALUES ($1, $2, $3, $4)
              RETURNING *`,
             [hostelId, roomNumber, roomType ?? null, maxCapacity]

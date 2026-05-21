@@ -48,8 +48,8 @@ class AllocationService {
             // ---------------------------------------------
             const groupRes = await client.query(`
                 SELECT hg.*,
-                       (SELECT COUNT(*) FROM students s WHERE s.group_id = hg.id) as group_size
-                FROM housing_groups hg
+                       (SELECT COUNT(*) FROM student s WHERE s.group_id = hg.id) as group_size
+                FROM housing_group hg
                 WHERE hg.id = $1
                 FOR UPDATE
             `, [groupId]);
@@ -62,7 +62,7 @@ class AllocationService {
 
             // Verify submitter belongs to this group
             const memberRes = await client.query(
-                'SELECT 1 FROM students WHERE id = $1 AND group_id = $2',
+                'SELECT 1 FROM student WHERE id = $1 AND group_id = $2',
                 [submittedBy, groupId]
             );
             if (memberRes.rowCount === 0) {
@@ -83,7 +83,7 @@ class AllocationService {
             // Validate batch — must exist AND status = ACTIVE
             // ---------------------------------------------
             const batchRes = await client.query(
-                'SELECT id, hostel_id, start_time, end_time, status FROM batches WHERE hostel_id = $1 AND batch_number = $2',
+                'SELECT id, hostel_id, start_time, end_time, status FROM batch WHERE hostel_id = $1 AND batch_number = $2',
                 [hostelId, batchNumber]
             );
             if (batchRes.rowCount === 0) {
@@ -117,7 +117,7 @@ class AllocationService {
 
             // Validate all submitted room IDs exist in this hostel
             const roomCheckRes = await client.query(
-                `SELECT id FROM rooms WHERE id = ANY($1::uuid[]) AND hostel_id = $2`,
+                `SELECT id FROM room WHERE id = ANY($1::uuid[]) AND hostel_id = $2`,
                 [preferences, batch.hostel_id]
             );
             if (roomCheckRes.rowCount !== preferences.length) {
@@ -128,7 +128,7 @@ class AllocationService {
 
             // Check available room count (max 10 preferences)
             const availableRoomsRes = await client.query(
-                'SELECT COUNT(*) as cnt FROM rooms WHERE hostel_id = $1 AND current_occupancy < max_capacity',
+                'SELECT COUNT(*) as cnt FROM room WHERE hostel_id = $1 AND current_occupancy < max_capacity',
                 [batch.hostel_id]
             );
             const availableCount = parseInt(availableRoomsRes.rows[0].cnt, 10);
@@ -147,7 +147,7 @@ class AllocationService {
             // Get effective leader rank (always from the group's primary applicant)
             // ---------------------------------------------
             const leaderRes = await client.query(
-                'SELECT individual_rank FROM students WHERE id = $1',
+                'SELECT individual_rank FROM student WHERE id = $1',
                 [group.primary_applicant_id]
             );
             const effectiveLeaderRank = leaderRes.rows[0]?.individual_rank;
@@ -156,7 +156,7 @@ class AllocationService {
             // Create submission
             // ---------------------------------------------
             const insertSubRes = await client.query(`
-                INSERT INTO allocation_submissions (
+                INSERT INTO allocation_submission (
                     group_id, submitted_by, batch_id, round_number,
                     effective_group_rank, effective_leader_rank, effective_group_size
                 )
@@ -177,8 +177,8 @@ class AllocationService {
             if (insertSubRes.rowCount === 0) {
                 const existingRes = await client.query(
                     `SELECT asb.id, asb.submitted_by, asb.submitted_at, s.name as submitted_by_name
-                     FROM allocation_submissions asb
-                     JOIN students s ON s.id = asb.submitted_by
+                     FROM allocation_submission asb
+                     JOIN student s ON s.id = asb.submitted_by
                      WHERE asb.group_id = $1 AND asb.batch_id = $2 AND asb.round_number = $3`,
                     [groupId, resolvedBatchId, roundNumber]
                 );
@@ -214,7 +214,7 @@ class AllocationService {
             }
 
             const insertPrefQuery = `
-                INSERT INTO submission_preferences (submission_id, room_id, preference_order)
+                INSERT INTO submission_preference (submission_id, room_id, preference_order)
                 VALUES ${prefValues.join(', ')}
             `;
 
@@ -242,8 +242,8 @@ class AllocationService {
         // Fetch active submissions, rollover groups first, then by rank within each tier
         const submissionsRes = await pool.query(`
             SELECT asb.*, hg.is_rollover_priority
-            FROM allocation_submissions asb
-            JOIN housing_groups hg ON hg.id = asb.group_id
+            FROM allocation_submission asb
+            JOIN housing_group hg ON hg.id = asb.group_id
             WHERE asb.batch_id = $1 AND asb.round_number = $2 AND asb.is_processed = false
             ORDER BY hg.is_rollover_priority DESC, asb.effective_group_rank ASC
         `, [batchId, roundNumber]);
@@ -254,7 +254,7 @@ class AllocationService {
             // Fetch all preferences for these submissions
             const submissionIds = submissions.map(s => s.id);
             const prefRes = await pool.query(`
-                SELECT * FROM submission_preferences
+                SELECT * FROM submission_preference
                 WHERE submission_id = ANY($1::uuid[])
                 ORDER BY preference_order ASC
             `, [submissionIds]);
@@ -300,7 +300,7 @@ class AllocationService {
                    current_occupancy,
                    (max_capacity - current_occupancy) as remaining_beds,
                    (current_occupancy < max_capacity) as available
-            FROM rooms
+            FROM room
             WHERE hostel_id = $1
             ORDER BY room_number ASC
         `, [hostelId]);
@@ -322,21 +322,23 @@ class AllocationService {
     async getAllocationStatus(studentId) {
         const studentRes = await pool.query(`
             SELECT s.*, hg.status as group_status, hg.batch_id
-            FROM students s
-            LEFT JOIN housing_groups hg ON s.group_id = hg.id
+            FROM student s
+            LEFT JOIN housing_group hg ON s.group_id = hg.id
             WHERE s.id = $1
         `, [studentId]);
 
         if (studentRes.rowCount === 0) {
-            throw new Error('Student not found');
+            const err = new Error('Student not found');
+            err.statusCode = 404;
+            throw err;
         }
 
         const student = studentRes.rows[0];
 
         const assignmentRes = await pool.query(`
             SELECT ra.*, row_to_json(r.*) as room
-            FROM room_assignments ra
-            JOIN rooms r ON ra.room_id = r.id
+            FROM room_assignment ra
+            JOIN room r ON ra.room_id = r.id
             WHERE ra.student_id = $1 AND ra.assignment_status IN ('UPCOMING', 'ACTIVE')
             LIMIT 1
         `, [studentId]);
@@ -403,7 +405,7 @@ class AllocationService {
         try {
             await client.query('BEGIN');
 
-            const roomRes = await client.query('SELECT max_capacity, current_occupancy FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
+            const roomRes = await client.query('SELECT max_capacity, current_occupancy FROM room WHERE id = $1 FOR UPDATE', [roomId]);
             if (roomRes.rowCount === 0) {
                 throw new Error('Room not found');
             }
@@ -415,7 +417,7 @@ class AllocationService {
 
             // Using direct INSERT. Database triggers handle student status and room occupancy.
             await client.query(`
-                INSERT INTO room_assignments (room_id, student_id, assigned_by, assignment_status)
+                INSERT INTO room_assignment (room_id, student_id, assigned_by, assignment_status)
                 VALUES ($1, $2, 'ADMIN', 'ACTIVE')
             `, [roomId, studentId]);
 
@@ -441,8 +443,8 @@ class AllocationService {
     async getBatchResults(batchId) {
         const submissionsRes = await pool.query(`
             SELECT asb.*, row_to_json(hg.*) as group
-            FROM allocation_submissions asb
-            LEFT JOIN housing_groups hg ON asb.group_id = hg.id
+            FROM allocation_submission asb
+            LEFT JOIN housing_group hg ON asb.group_id = hg.id
             WHERE asb.batch_id = $1
         `, [batchId]);
 
@@ -460,7 +462,7 @@ class AllocationService {
     // =====================================================
 
     async getCurrentRound(batchId) {
-        const batchRes = await pool.query('SELECT start_time FROM batches WHERE id = $1', [batchId]);
+        const batchRes = await pool.query('SELECT start_time FROM batch WHERE id = $1', [batchId]);
 
         if (batchRes.rowCount === 0) {
             throw new Error('Batch not found');
@@ -482,7 +484,7 @@ class AllocationService {
 
     async getActiveBatch(hostelId) {
         const batchRes = await pool.query(`
-            SELECT * FROM batches
+            SELECT * FROM batch
             WHERE hostel_id = $1 AND status = 'ACTIVE'
             ORDER BY start_time ASC
             LIMIT 1
@@ -496,7 +498,7 @@ class AllocationService {
     // =====================================================
 
     async validateAllocationPhase(hostelId) {
-        const hostelRes = await pool.query('SELECT is_paused, current_phase FROM hostels WHERE id = $1', [hostelId]);
+        const hostelRes = await pool.query('SELECT is_paused, current_phase FROM hostel WHERE id = $1', [hostelId]);
 
         if (hostelRes.rowCount === 0) {
             throw new Error('Hostel not found');

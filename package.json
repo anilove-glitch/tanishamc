@@ -7,8 +7,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon index.js"
+    "dev":      "nodemon index.js",
+    "seed":     "node src/roomallocation/db/seed.js",
+    "test:api": "node src/roomallocation/db/test-api.js"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -16,5 +17,8 @@
     "jsonwebtoken": "^9.0.3",
     "nodemon": "^3.1.14",
     "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "bcryptjs": "^3.0.3"
   }
 }

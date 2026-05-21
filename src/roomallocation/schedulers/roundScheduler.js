@@ -51,7 +51,7 @@ const _state = new Map();
  */
 export async function recoverOnBoot(batchId) {
     const batchRes = await pool.query(
-        `SELECT * FROM batches WHERE id = $1 AND status = 'ACTIVE'`,
+        `SELECT * FROM batch WHERE id = $1 AND status = 'ACTIVE'`,
         [batchId]
     );
 
@@ -84,7 +84,7 @@ export async function recoverOnBoot(batchId) {
     // Check if submissions already happened for rounds we missed
     for (let r = 1; r < currentRound; r++) {
         const processed = await pool.query(
-            `SELECT 1 FROM allocation_submissions WHERE batch_id = $1 AND round_number = $2 AND is_processed = true`,
+            `SELECT 1 FROM allocation_submission WHERE batch_id = $1 AND round_number = $2 AND is_processed = true`,
             [batchId, r]
         );
         if (processed.rowCount === 0) {
@@ -110,10 +110,14 @@ export async function recoverOnBoot(batchId) {
 export async function startRoundCycle(batchId) {
     console.log(`[roundScheduler] Starting round cycle for batch ${batchId}`);
 
-    _state.set(batchId, { currentRound: 1, frozen: false, timerId: null });
+    // Record the absolute batch start time — used for drift-free round scheduling.
+    // Each round's freeze fires at: batchStartTime + (roundNumber × ROUND_DURATION_MS)
+    // so processing time inside executeRound does NOT accumulate across rounds.
+    const batchStartTime = Date.now();
+    _state.set(batchId, { currentRound: 1, frozen: false, timerId: null, batchStartTime });
     emit(WS_EVENTS.ROUND_OPENED, { batchId, round: 1 });
 
-    _armFreezeTimer(batchId, 1, ROUND_DURATION_MS);
+    _armFreezeTimer(batchId, 1, batchStartTime);
 }
 
 /**
@@ -132,11 +136,37 @@ export function stopRoundCycle(batchId) {
 // INTERNAL TIMER HELPERS
 // ─────────────────────────────────────────────────────────
 
-function _armFreezeTimer(batchId, round, delayMs) {
+/**
+ * Arm the freeze timer for a round using an ABSOLUTE deadline.
+ *
+ * delayMs is calculated as:
+ *   targetFireAt = batchStartTime + (roundNumber × ROUND_DURATION_MS)
+ *   delay        = targetFireAt - Date.now()
+ *
+ * This means: even if executeRound() takes 45 seconds, the next round's
+ * timer is still anchored to the original batch start, not to when
+ * executeRound finished. No drift accumulates across 6 rounds.
+ *
+ * @param {string} batchId
+ * @param {number} round — 1-indexed round number
+ * @param {number} batchStartTime — epoch ms when the batch started
+ */
+function _armFreezeTimer(batchId, round, batchStartTime) {
     const state = _state.get(batchId);
     if (!state) return;
 
     clearTimeout(state.timerId);
+
+    const targetFireAt = batchStartTime + round * ROUND_DURATION_MS;
+    const delayMs      = Math.max(0, targetFireAt - Date.now());
+
+    if (delayMs < 1000) {
+        console.warn(
+            `[roundScheduler] Round ${round} deadline already past by ${-delayMs}ms — ` +
+            'firing immediately. Check for server overload.'
+        );
+    }
+
     state.timerId = setTimeout(async () => {
         try {
             await freezeRound(batchId, round);
@@ -145,7 +175,13 @@ function _armFreezeTimer(batchId, round, delayMs) {
         }
     }, delayMs);
 
+    state.timerId = state.timerId; // keep reference
     _state.set(batchId, state);
+
+    console.log(
+        `[roundScheduler] Round ${round} freeze timer set: fires in ${Math.round(delayMs / 1000)}s ` +
+        `(absolute target: ${new Date(targetFireAt).toISOString()})`
+    );
 }
 
 // ─────────────────────────────────────────────────────────
@@ -199,7 +235,7 @@ export async function executeRound(batchId, round) {
     // during this round. Self-terminating if none exist.
     if (_evaluationScheduler) {
         try {
-            const batchRes = await pool.query(`SELECT hostel_id FROM batches WHERE id = $1`, [batchId]);
+            const batchRes = await pool.query(`SELECT hostel_id FROM batch WHERE id = $1`, [batchId]);
             if (batchRes.rowCount > 0) {
                 await _evaluationScheduler.recalculateGroupRanks(batchRes.rows[0].hostel_id);
             }
@@ -223,7 +259,7 @@ export async function broadcastResults(batchId, round) {
     try {
         // Get hostel_id for this batch
         const batchRes = await pool.query(
-            `SELECT hostel_id FROM batches WHERE id = $1`,
+            `SELECT hostel_id FROM batch WHERE id = $1`,
             [batchId]
         );
         if (batchRes.rowCount === 0) return;
@@ -276,7 +312,8 @@ export async function advanceRound(batchId, completedRound) {
     console.log(`[roundScheduler] Submission window open for round ${nextRound}`);
     emit(WS_EVENTS.ROUND_OPENED, { batchId, round: nextRound });
 
-    _armFreezeTimer(batchId, nextRound, ROUND_DURATION_MS);
+    // Use the stored batchStartTime for absolute deadline — no drift
+    _armFreezeTimer(batchId, nextRound, state.batchStartTime);
 }
 
 // ─────────────────────────────────────────────────────────

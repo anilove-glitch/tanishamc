@@ -12,7 +12,7 @@
  *   ...
  *
  * The DB trigger `trigger_sync_leader_rank` automatically
- * propagates each rank to housing_groups.group_rank when
+ * propagates each rank to housing_group.group_rank when
  * the student is a group leader.
  */
 
@@ -106,7 +106,7 @@ async function validateRankRecords(records) {
     // 2. Check all roll_nos exist + no existing ranks
     const rollNos = records.map(r => r.roll_no);
     const dbRes = await pool.query(
-        `SELECT roll_no, individual_rank FROM students WHERE roll_no = ANY($1::text[])`,
+        `SELECT roll_no, individual_rank FROM student WHERE roll_no = ANY($1::text[])`,
         [rollNos]
     );
 
@@ -160,7 +160,7 @@ export const bulkImportRanksFromCsv = async (csvText) => {
         for (const { roll_no, rank } of records) {
             // individual_rank is UNIQUE — DB enforces no duplicates cross-import too
             const res = await client.query(
-                `UPDATE students SET individual_rank = $1 WHERE roll_no = $2 RETURNING id, roll_no, individual_rank`,
+                `UPDATE student SET individual_rank = $1 WHERE roll_no = $2 RETURNING id, roll_no, individual_rank`,
                 [rank, roll_no]
             );
             if (res.rowCount > 0) {
@@ -198,7 +198,7 @@ export const previewRankImport = async (csvText) => {
 
     const rollNos = records.map(r => r.roll_no);
     const dbRes = await pool.query(
-        `SELECT roll_no, individual_rank FROM students WHERE roll_no = ANY($1::text[])`,
+        `SELECT roll_no, individual_rank FROM student WHERE roll_no = ANY($1::text[])`,
         [rollNos]
     );
 
@@ -223,7 +223,7 @@ export const previewRankImport = async (csvText) => {
 export const getUnrankedStudents = async () => {
     const result = await pool.query(
         `SELECT id, name, roll_no, cgpa, department
-         FROM students
+         FROM student
          WHERE individual_rank IS NULL
          ORDER BY cgpa DESC NULLS LAST`
     );

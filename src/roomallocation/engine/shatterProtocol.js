@@ -38,7 +38,7 @@ import pool from '../../db/pool.js';
 export async function evaluate(groupId, hostelId) {
     // 1. Get current group size (count actual members)
     const sizeRes = await pool.query(
-        `SELECT COUNT(*) as size FROM students WHERE group_id = $1`,
+        `SELECT COUNT(*) as size FROM student WHERE group_id = $1`,
         [groupId]
     );
     const groupSize = parseInt(sizeRes.rows[0].size, 10);
@@ -51,8 +51,8 @@ export async function evaluate(groupId, hostelId) {
     let effectiveHostelId = hostelId;
     if (!effectiveHostelId) {
         const batchRes = await pool.query(
-            `SELECT b.hostel_id FROM housing_groups hg
-             JOIN batches b ON hg.batch_id = b.id
+            `SELECT b.hostel_id FROM housing_group hg
+             JOIN batch b ON hg.batch_id = b.id
              WHERE hg.id = $1`,
             [groupId]
         );
@@ -66,7 +66,7 @@ export async function evaluate(groupId, hostelId) {
     // 3. Find largest available room capacity DYNAMICALLY
     const roomsRes = await pool.query(
         `SELECT id, max_capacity, current_occupancy
-         FROM rooms
+         FROM room
          WHERE hostel_id = $1 AND current_occupancy < max_capacity`,
         [effectiveHostelId]
     );
@@ -106,7 +106,7 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
 
         // Fetch and lock all members
         const membersRes = await client.query(
-            `SELECT id FROM students WHERE group_id = $1 ORDER BY id ASC`,
+            `SELECT id FROM student WHERE group_id = $1 ORDER BY id ASC`,
             [groupId]
         );
         const memberIds = membersRes.rows.map(r => r.id);
@@ -115,7 +115,7 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
         // Prevents handle_primary_applicant_leave from auto-deleting
         // the group when the last member is unlinked.
         await client.query(
-            `UPDATE housing_groups SET status = 'SHATTERED' WHERE id = $1`,
+            `UPDATE housing_group SET status = 'SHATTERED' WHERE id = $1`,
             [groupId]
         );
 
@@ -125,7 +125,7 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
             await client.query(`SET LOCAL app.bypass_group_lock = 'on'`);
             // Unlink all members — they can re-form
             await client.query(
-                `UPDATE students SET group_id = NULL WHERE id = ANY($1::int[])`,
+                `UPDATE student SET group_id = NULL WHERE id = ANY($1::int[])`,
                 [memberIds]
             );
         }

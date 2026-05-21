@@ -107,7 +107,7 @@ export async function withTransaction(callback, {
 export async function lockRoom(client, roomId) {
     const res = await client.query(
         `SELECT id, hostel_id, room_number, room_type, max_capacity, current_occupancy
-         FROM rooms
+         FROM room
          WHERE id = $1
          FOR UPDATE`,
         [roomId]
@@ -126,7 +126,7 @@ export async function lockRoom(client, roomId) {
 export async function lockGroup(client, groupId) {
     const res = await client.query(
         `SELECT id, primary_applicant_id, group_rank, status, rollover_count, is_rollover_priority, batch_id
-         FROM housing_groups
+         FROM housing_group
          WHERE id = $1
          FOR UPDATE`,
         [groupId]
@@ -157,7 +157,7 @@ export async function lockRoomsInOrder(client, roomIds) {
 
     const res = await client.query(
         `SELECT id, hostel_id, room_number, room_type, max_capacity, current_occupancy
-         FROM rooms
+         FROM room
          WHERE id = ANY($1::uuid[])
          ORDER BY id ASC
          FOR UPDATE`,
@@ -186,7 +186,7 @@ export async function lockStudents(client, studentIds) {
 
     const res = await client.query(
         `SELECT id, name, roll_no, group_id, is_allotted, allocated_room_id, individual_rank
-         FROM students
+         FROM student
          WHERE id = ANY($1::int[])
          ORDER BY id ASC
          FOR UPDATE`,
