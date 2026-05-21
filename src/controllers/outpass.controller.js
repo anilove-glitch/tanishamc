@@ -455,58 +455,140 @@ const getPendingOutpasses = asyncHandler(async (req, res) => {
     const offset =
         (page - 1) * limit;
 
+    /* =========================================
+       GET ATTENDANT HOSTEL
+    ========================================= */
+
     const hostelQuery = `
-    SELECT hostel_id
-    FROM attendent
-    WHERE id = $1
-    LIMIT 1;
-`;
+        SELECT hostel_id
+        FROM attendent
+        WHERE id = $1
+        LIMIT 1;
+    `;
 
-    const hostelResult = await pool.query(
-        hostelQuery,
-        [req.user.id]
-    );
+    const hostelResult =
+        await pool.query(
+            hostelQuery,
+            [req.user.id]
+        );
 
-    if (hostelResult.rows.length === 0) {
+    if (
+        hostelResult.rows.length === 0
+    ) {
+
         throw new ApiError(
             404,
-            "Attendent not found"
+            "Attendant not found"
         );
     }
 
     const hostelId =
         hostelResult.rows[0].hostel_id;
 
+    /* =========================================
+       FETCH PENDING OUTPASSES
+    ========================================= */
+
     const query = `
         SELECT
-            o.*,
+            o.id,
+            o.student_id,
+            o.outpass_type,
+            o.place_of_visit,
+            o.purpose,
+            o.departure_datetime,
+            o.arrival_datetime,
+            o.parent_contact,
+            o.is_active,
+            o.outp_status,
+            o.std_status,
+            o.created_at,
+            o.updated_at,
+            o.approved_at,
+
             s.name,
+            s.email,
             s.roll_no,
+            s.phone,
             s.department,
+            s.room,
+            s.hostel,
             s.hostel_id
+
         FROM outpass o
+
         JOIN student s
         ON o.student_id = s.id
+
         WHERE
             o.outp_status = 'Pending'
             AND s.hostel_id = $1
-        ORDER BY o.created_at ASC
+
+        ORDER BY
+            o.created_at DESC
+
         LIMIT $2 OFFSET $3;
     `;
 
-    const result = await pool.query(
-        query,
-        [
-            hostelId,
-            limit,
-            offset
-        ]
-    );
+    const result =
+        await pool.query(
+            query,
+            [
+                hostelId,
+                limit,
+                offset
+            ]
+        );
+
+    /* =========================================
+       TOTAL COUNT
+    ========================================= */
+
+    const countQuery = `
+        SELECT COUNT(*) AS total
+        FROM outpass o
+
+        JOIN student s
+        ON o.student_id = s.id
+
+        WHERE
+            o.outp_status = 'Pending'
+            AND s.hostel_id = $1;
+    `;
+
+    const countResult =
+        await pool.query(
+            countQuery,
+            [hostelId]
+        );
+
+    const total =
+        parseInt(
+            countResult.rows[0].total
+        );
+
+    /* =========================================
+       RESPONSE
+    ========================================= */
 
     return res.status(200).json(
+
         new ApiResponse(
             200,
-            result.rows,
+            {
+                outpasses:
+                    result.rows,
+
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages:
+                        Math.ceil(
+                            total / limit
+                        ),
+                },
+            },
             "Pending outpasses fetched successfully"
         )
     );
@@ -953,23 +1035,41 @@ const recordEntry = asyncHandler(async (req, res) => {
 MONITOR DASHBOARD
 =================================================
 */
+/*
+=================================================
+MONITOR DASHBOARD
+=================================================
+*/
 const monitorDashboard = asyncHandler(async (req, res) => {
 
     const query = `
         SELECT
             o.*,
+
+            s.id AS student_id,
             s.name,
             s.roll_no,
-            s.department
+            s.department,
+            s.email,
+            s.phone,
+            s.room,
+            s.hostel,
+            s.hostel_id
+
         FROM outpass o
+
         JOIN student s
         ON o.student_id = s.id
+
         ORDER BY o.created_at DESC;
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(
+        query
+    );
 
     return res.status(200).json(
+
         new ApiResponse(
             200,
             result.rows,
