@@ -2,49 +2,82 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
-import outpassRoutes from "./routes/outpass.routes.js";
 import pool from "./db/pool.js";
+
+import outpassRoutes from "./routes/outpass.routes.js";
+import studentRoutes from "./routes/student.routes.js"
+import authRoutes from "../working-routes/auth.js";
 
 const app = express();
 
 /*
 =================================================
-MIDDLEWARES
+GLOBAL MIDDLEWARES
 =================================================
 */
 
+app.use(
+    cors({
+        origin: true,
+        credentials: true
+    })
+);
+
 app.use(express.json());
 
-app.use(express.urlencoded({ extended: true }));
-app.use(cors());
-
+app.use(
+    express.urlencoded({
+        extended: true
+    })
+);
 
 app.use(cookieParser());
 
 /*
 =================================================
-TEST ROUTES
+REQUEST LOGGER
 =================================================
 */
 
-// Health Check
+app.use((req, res, next) => {
+
+    console.log(
+        `${req.method} ${req.originalUrl}`
+    );
+
+    next();
+});
+
+/*
+=================================================
+HEALTH CHECK ROUTES
+=================================================
+*/
+
+// Root Route
 app.get("/", (req, res) => {
-    res.status(200).json({
+
+    return res.status(200).json({
         success: true,
-        message: "Outpass Backend Running Successfully"
+        message:
+            "Hostel Backend Running Successfully"
     });
 });
 
+// Debug Route
 app.post("/debug", (req, res) => {
-    console.log(req.body);
 
-    res.json({
+    console.log("BODY:", req.body);
+
+    return res.status(200).json({
+        success: true,
         body: req.body
     });
 });
 
 // PostgreSQL Connection Test
 app.get("/test-db", async (req, res) => {
+
     try {
 
         const result = await pool.query(
@@ -53,8 +86,9 @@ app.get("/test-db", async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: "Database connected successfully",
-            data: result.rows
+            message:
+                "Database connected successfully",
+            data: result.rows[0]
         });
 
     } catch (error) {
@@ -72,10 +106,33 @@ API ROUTES
 =================================================
 */
 
+// Auth Routes
+app.use(
+    "/api/auth",
+    authRoutes
+);
+
+// Outpass Routes
 app.use(
     "/api/outpasses",
     outpassRoutes
 );
+
+// student routes
+app.use("/api/students", studentRoutes);
+/*
+=================================================
+404 ROUTE HANDLER
+=================================================
+*/
+
+app.use((req, res) => {
+
+    return res.status(404).json({
+        success: false,
+        message: "Route not found"
+    });
+});
 
 /*
 =================================================
@@ -85,12 +142,18 @@ GLOBAL ERROR HANDLER
 
 app.use((err, req, res, next) => {
 
-    return res.status(err.statusCode || 500).json({
-        success: false,
-        message: err.message || "Internal Server Error",
-        errors: err.errors || []
-    });
+    console.error(err);
 
+    return res.status(
+        err.statusCode || 500
+    ).json({
+        success: false,
+        message:
+            err.message ||
+            "Internal Server Error",
+        errors:
+            err.errors || []
+    });
 });
 
 export default app;
