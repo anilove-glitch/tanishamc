@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 
 import outpassRoutes from "./routes/outpass.routes.js";
 import pool from "./db/pool.js";
+import groupRoutes from "./roomallocation/groups/groups.routes.js";
 
 const app = express();
 
@@ -13,6 +14,7 @@ MIDDLEWARES
 =================================================
 */
 
+
 app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
@@ -20,6 +22,10 @@ app.use(cors());
 
 
 app.use(cookieParser());
+app.use(
+    "/api/groups",
+    groupRoutes
+);
 
 /*
 =================================================
