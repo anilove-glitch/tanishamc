@@ -227,3 +227,100 @@ export const updateGroupStatus = async (groupId, status) => {
         throw new ApiError(500, 'Error updating group status: ' + error.message);
     }
 };
+
+/**
+ * Get all group requests (admin / debug view)
+ */
+export const getAllRequests = async () => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM group_requests ORDER BY created_at DESC`
+        );
+        return result.rows;
+    } catch (error) {
+        throw new ApiError(500, 'Error fetching group requests: ' + error.message);
+    }
+};
+
+/**
+ * Get all housing groups (admin / debug view)
+ */
+export const getAllGroups = async () => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM v_housing_groups_with_size ORDER BY id`
+        );
+        return result.rows;
+    } catch (error) {
+        throw new ApiError(500, 'Error fetching groups: ' + error.message);
+    }
+};
+
+/**
+ * Get group details with its members list
+ */
+export const getGroupMembers = async (groupId) => {
+    try {
+        const groupRes = await pool.query(
+            `SELECT * FROM v_housing_groups_with_size WHERE id = $1`,
+            [groupId]
+        );
+        if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
+
+        const membersRes = await pool.query(
+            `SELECT id, name, roll_no, email, individual_rank
+             FROM students
+             WHERE group_id = $1
+             ORDER BY individual_rank ASC`,
+            [groupId]
+        );
+
+        return {
+            group: groupRes.rows[0],
+            members: membersRes.rows,
+        };
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(500, 'Error fetching group members: ' + error.message);
+    }
+};
+
+/**
+ * Transfer leadership to another group member
+ */
+export const transferLeadership = async (groupId, newLeaderId) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Verify group exists
+        const groupRes = await client.query(
+            `SELECT id FROM housing_groups WHERE id = $1`,
+            [groupId]
+        );
+        if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
+
+        // Verify new leader is a member of this group
+        const memberRes = await client.query(
+            `SELECT id FROM students WHERE id = $1 AND group_id = $2`,
+            [newLeaderId, groupId]
+        );
+        if (memberRes.rows.length === 0) {
+            throw new ApiError(400, 'New leader must be a member of the group');
+        }
+
+        const updated = await client.query(
+            `UPDATE housing_groups SET primary_applicant_id = $1 WHERE id = $2 RETURNING *`,
+            [newLeaderId, groupId]
+        );
+
+        await client.query('COMMIT');
+        return updated.rows[0];
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(500, 'Error transferring leadership: ' + error.message);
+    } finally {
+        client.release();
+    }
+};

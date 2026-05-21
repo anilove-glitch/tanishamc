@@ -63,3 +63,49 @@ export const getRoomById = async (roomId) => {
         throw new ApiError(500, 'Error fetching room: ' + error.message);
     }
 };
+
+/**
+ * Create a new hostel (admin setup)
+ */
+export const createHostel = async (name, type, totalCapacity) => {
+    try {
+        if (!name) throw new ApiError(400, 'Hostel name is required');
+        const result = await pool.query(
+            `INSERT INTO hostels (name, type, total_capacity)
+             VALUES ($1, $2, $3)
+             RETURNING *`,
+            [name, type ?? null, totalCapacity ?? null]
+        );
+        return result.rows[0];
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (error.constraint === 'hostels_name_key') {
+            throw new ApiError(409, `Hostel with name "${name}" already exists`);
+        }
+        throw new ApiError(500, 'Error creating hostel: ' + error.message);
+    }
+};
+
+/**
+ * Create a new room in a hostel (admin setup)
+ */
+export const createRoom = async (hostelId, roomNumber, roomType, maxCapacity) => {
+    try {
+        if (!hostelId || !roomNumber || !maxCapacity) {
+            throw new ApiError(400, 'hostelId, roomNumber, and maxCapacity are required');
+        }
+        const result = await pool.query(
+            `INSERT INTO rooms (hostel_id, room_number, room_type, max_capacity)
+             VALUES ($1, $2, $3, $4)
+             RETURNING *`,
+            [hostelId, roomNumber, roomType ?? null, maxCapacity]
+        );
+        return result.rows[0];
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (error.constraint === 'rooms_hostel_id_room_number_key') {
+            throw new ApiError(409, `Room ${roomNumber} already exists in this hostel`);
+        }
+        throw new ApiError(500, 'Error creating room: ' + error.message);
+    }
+};

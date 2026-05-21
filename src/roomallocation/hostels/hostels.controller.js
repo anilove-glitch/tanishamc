@@ -1,6 +1,4 @@
-import {
-    createHostelService
-} from "./hostels.service.js";
+import { createHostel } from '../services/room.service.js';
 
 /*
 =================================================
@@ -8,31 +6,12 @@ CREATE HOSTEL
 =================================================
 */
 
-export const createHostelController =
-async (req, res) => {
-
+export const createHostelController = async (req, res) => {
     try {
-
-        const { name } =
-            req.body;
-
-        const hostel =
-            await createHostelService(
-                name
-            );
-
-        res.status(200).json({
-            success: true,
-            hostel
-        });
-
+        const { name, type, totalCapacity } = req.body;
+        const hostel = await createHostel(name, type, totalCapacity);
+        res.status(201).json({ success: true, hostel });
     } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+        res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
-
 };
