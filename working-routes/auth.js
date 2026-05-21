@@ -243,30 +243,32 @@ router.post('/signup', async (req, res) => {
             const hostelData = hostelResult.rows[0];
 
             result = await pool.query(
-                `INSERT INTO student
-                (
-                    name,
-                    email,
-                    password,
-                    hostel,
-                    hostel_id,
-                    room,
-                    phone,
-                    department
-                )
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-                RETURNING *`,
-                [
-                    name,
-                    email,
-                    password,
-                    hostelData.name,
-                    hostelData.id,
-                    room,
-                    phone,
-                    department
-                ]
-            );
+    `INSERT INTO student
+    (
+        name,
+        email,
+        password,
+        hostel,
+        hostel_id,
+        room,
+        roll_no,
+        phone,
+        department
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    RETURNING *`,
+    [
+        name,
+        email,
+        password,
+        hostelData.name,
+        hostelData.id,
+        room,
+        rollno,
+        phone,
+        department
+    ]
+);
 
             user = result.rows[0];
         }

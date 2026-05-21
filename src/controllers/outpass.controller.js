@@ -1067,6 +1067,7 @@ const monitorDashboard = asyncHandler(async (req, res) => {
     const result = await pool.query(
         query
     );
+    console.log(result.rows)
 
     return res.status(200).json(
 
