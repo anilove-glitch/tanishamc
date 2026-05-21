@@ -165,6 +165,20 @@ export async function startBatch(batchId) {
     const batch = batchRes.rows[0];
     console.log(`[batchScheduler] Batch ${batch.batch_number} activated`);
 
+    // ── HARD LOCK: first action on batch start ─────────────
+    // All SOFT_LOCKED groups assigned to this batch are immediately
+    // HARD_LOCKED: no new members can be accepted from this point.
+    const hardLockRes = await pool.query(
+        `UPDATE housing_groups
+         SET status = 'HARD_LOCKED'
+         WHERE batch_id = $1
+           AND status = 'SOFT_LOCKED'`,
+        [batchId]
+    );
+    console.log(
+        `[batchScheduler] Hard-locked ${hardLockRes.rowCount} groups for batch ${batch.batch_number}`
+    );
+
     // Transition hostel to LIVE_BATCHES if not already
     await transitionSystemPhase(batch.hostel_id, SYSTEM_PHASES.LIVE_BATCHES);
 
@@ -256,13 +270,11 @@ export async function activateNextBatch(hostelId, completedBatchNumber) {
     );
 
     if (nextRes.rowCount === 0) {
+        // No more pending batches — transition hostel phase.
+        // Final sweep is triggered by evaluationScheduler.runPostBatchEvaluation()
+        // once it confirms all batches (PENDING + ACTIVE) are done.
         console.log(`[batchScheduler] No more pending batches for hostel ${hostelId}. Transitioning to FINAL_SWEEP.`);
         await transitionSystemPhase(hostelId, SYSTEM_PHASES.FINAL_SWEEP);
-
-        // evaluationScheduler handles final sweep after this
-        if (_evaluationScheduler) {
-            await _evaluationScheduler.scheduleFinalsweep(hostelId);
-        }
         return;
     }
 

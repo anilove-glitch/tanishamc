@@ -121,10 +121,33 @@ export const respondToGroupRequest = async (requestId, status) => {
 
         // If accepted, add student to group
         if (status === 'ACCEPTED') {
+            // Verify group status — Phase 2 top-up gate
+            const groupRes = await client.query(
+                `SELECT hg.status,
+                        (SELECT COUNT(*) FROM students s WHERE s.group_id = hg.id) AS member_count
+                 FROM housing_groups hg
+                 WHERE hg.id = $1`,
+                [request.group_id]
+            );
+            const group = groupRes.rows[0];
+
+            if (!group) throw new ApiError(404, 'Group not found');
+
+            if (group.status === 'HARD_LOCKED' || group.status === 'ALLOCATED') {
+                throw new ApiError(400,
+                    `Cannot accept new members: group is ${group.status}. ` +
+                    'The batch has started — no more members allowed.'
+                );
+            }
+
+            // During SOFT_LOCK: accept is fine as long as group has space (< 4)
+            if (group.status === 'SOFT_LOCKED' && parseInt(group.member_count, 10) >= 4) {
+                throw new ApiError(400, 'Group is already full (4 members max)');
+            }
+
             // Re-verify student isn't in a group (race condition check)
             const studentCheck = await client.query(`SELECT group_id FROM students WHERE id = $1`, [request.student_id]);
             if (studentCheck.rows[0].group_id) {
-                // Auto-cancel request if student found a group elsewhere
                 await client.query(`UPDATE group_requests SET status = 'CANCELED' WHERE id = $1`, [requestId]);
                 throw new ApiError(400, 'Student joined another group. Request auto-canceled.');
             }
@@ -135,9 +158,7 @@ export const respondToGroupRequest = async (requestId, status) => {
                 [request.group_id, request.student_id]
             );
 
-            // Auto-cancel other PENDING requests for this student.
-            // Explicitly exclude the just-accepted request and any already-accepted ones
-            // to avoid cancelling a legitimately accepted request.
+            // Auto-cancel other PENDING requests for this student
             await client.query(
                 `UPDATE group_requests
                  SET status = 'CANCELED'
@@ -152,7 +173,6 @@ export const respondToGroupRequest = async (requestId, status) => {
         return updateRes.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
-        // Handle trigger exception for capacity
         if (error.message && error.message.includes('maximum capacity')) {
             throw new ApiError(400, error.message);
         }

@@ -239,11 +239,13 @@ class AllocationService {
     // =====================================================
 
     async executeBatchRound(batchId, roundNumber) {
-        // Fetch active submissions
+        // Fetch active submissions, rollover groups first, then by rank within each tier
         const submissionsRes = await pool.query(`
-            SELECT * FROM allocation_submissions
-            WHERE batch_id = $1 AND round_number = $2 AND is_processed = false
-            ORDER BY effective_group_rank ASC
+            SELECT asb.*, hg.is_rollover_priority
+            FROM allocation_submissions asb
+            JOIN housing_groups hg ON hg.id = asb.group_id
+            WHERE asb.batch_id = $1 AND asb.round_number = $2 AND asb.is_processed = false
+            ORDER BY hg.is_rollover_priority DESC, asb.effective_group_rank ASC
         `, [batchId, roundNumber]);
 
         const submissions = submissionsRes.rows;

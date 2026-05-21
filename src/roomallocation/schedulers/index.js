@@ -13,9 +13,8 @@
  *   await initSchedulers();
  *
  * Env vars:
- *   ROUND_DURATION_MS     — override 10-min round (default: 600000)
- *   FINAL_SWEEP_AT_ISO    — ISO timestamp for final sweep
- *   FINAL_SWEEP_DELAY_MS  — fallback delay after last batch (default: 1800000)
+ *   TEST_MODE=true         — 30s rounds, 3-min batches (see constants/testConfig.js)
+ *   FINAL_SWEEP_AT_ISO     — (removed) final sweep is now event-driven
  * ============================================================
  */
 
@@ -32,6 +31,11 @@ export async function initSchedulers() {
         roundScheduler,
         evaluationScheduler,
     });
+
+    // roundScheduler needs evaluationScheduler for:
+    //   - shatter check at the start of each new round
+    //   - rank recalculation at the end of each round
+    roundScheduler.injectEvaluationScheduler(evaluationScheduler);
 
     // Run DB-driven recovery for any in-flight state
     await batchScheduler.recoverOnBoot();

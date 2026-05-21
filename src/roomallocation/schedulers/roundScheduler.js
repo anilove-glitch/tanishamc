@@ -29,9 +29,13 @@
 import pool from '../../db/pool.js';
 import { allocationService } from '../services/allocation.service.js';
 import { emit, WS_EVENTS } from '../websocket/emitter.js';
+import { ROUND_DURATION_MS, MAX_ROUNDS } from '../constants/testConfig.js';
 
-const ROUND_DURATION_MS = parseInt(process.env.ROUND_DURATION_MS || '600000', 10); // 10 min default
-const MAX_ROUNDS = 6;
+// Will be injected to avoid circular dep (evaluationScheduler uses roundScheduler)
+let _evaluationScheduler = null;
+export function injectEvaluationScheduler(evalSched) {
+    _evaluationScheduler = evalSched;
+}
 
 // Per-batch state: batchId → { currentRound, frozen, timerId }
 const _state = new Map();
@@ -191,6 +195,19 @@ export async function executeRound(batchId, round) {
     // Broadcast updated room map
     await broadcastResults(batchId, round);
 
+    // Recalculate ranks for any re-formed groups (from shatter) that finalised
+    // during this round. Self-terminating if none exist.
+    if (_evaluationScheduler) {
+        try {
+            const batchRes = await pool.query(`SELECT hostel_id FROM batches WHERE id = $1`, [batchId]);
+            if (batchRes.rowCount > 0) {
+                await _evaluationScheduler.recalculateGroupRanks(batchRes.rows[0].hostel_id);
+            }
+        } catch (err) {
+            console.error(`[roundScheduler] recalculateGroupRanks error:`, err.message);
+        }
+    }
+
     // Advance to next round
     await advanceRound(batchId, round);
 }
@@ -240,6 +257,17 @@ export async function advanceRound(batchId, completedRound) {
     // E. Reopen submission window for next round
     const state = _state.get(batchId);
     if (!state) return;
+
+    // Run shatter check before opening submissions for next round.
+    // If any group's size now exceeds the largest available room,
+    // dissolve them so they can regroup into smaller squads.
+    if (_evaluationScheduler) {
+        try {
+            await _evaluationScheduler.checkShatteredGroups(batchId);
+        } catch (err) {
+            console.error(`[roundScheduler] shatter check error (round ${nextRound}):`, err.message);
+        }
+    }
 
     state.currentRound = nextRound;
     state.frozen = false;

@@ -13,6 +13,7 @@
 
 import pool from '../../db/pool.js';
 import { SYSTEM_PHASES } from '../constants/phases.js';
+import { assignGroupsToBatches } from './softLock.service.js';
 import ApiError from '../../utils/apiError.js';
 
 // Valid phase transitions
@@ -67,6 +68,17 @@ export const setCurrentPhase = async (hostelId, newPhase) => {
         `UPDATE hostels SET current_phase = $1 WHERE id = $2 RETURNING *`,
         [newPhase, hostelId]
     );
+
+    // Side-effects: run batch assignment when entering SOFT_LOCK
+    if (hostel.current_phase === SYSTEM_PHASES.LOBBY && newPhase === SYSTEM_PHASES.SOFT_LOCK) {
+        try {
+            await assignGroupsToBatches(hostelId);
+        } catch (err) {
+            // Log but don't roll back the phase change — admin can retry batch assignment
+            console.error('[phase.service] softLock batch assignment error:', err.message);
+        }
+    }
+
     return result.rows[0];
 };
 
@@ -145,4 +157,19 @@ export const isPhase = async (hostelId, phase) => {
     } catch {
         return false;
     }
+};
+
+/**
+ * Admin override is allowed any time EXCEPT during LIVE_BATCHES.
+ * Throws ApiError(403) if allocation is currently running.
+ */
+export const canAdminOverride = async (hostelId) => {
+    const hostel = await getCurrentPhase(hostelId);
+    if (hostel.current_phase === SYSTEM_PHASES.LIVE_BATCHES) {
+        throw new ApiError(403,
+            'Admin override is disabled during LIVE_BATCHES. ' +
+            'Wait until allocation completes or pause the system first.'
+        );
+    }
+    return hostel;
 };
