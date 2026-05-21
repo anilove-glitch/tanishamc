@@ -98,7 +98,7 @@ MONITOR
 
 router.get(
     "/monitor",
-    auth,
+    // auth,
     monitorDashboard
 );
 
