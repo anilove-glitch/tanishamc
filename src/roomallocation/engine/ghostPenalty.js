@@ -104,7 +104,15 @@ async function _penalizeGroup(groupId, batchId) {
             // Bypass group-lock trigger — engine has authority to dissolve groups
             await client.query(`SET LOCAL app.bypass_group_lock = 'on'`);
 
-            // Unlink all members — they can re-form
+            // Strip individual rank from all penalized members.
+            // finalSweep sorts by individual_rank ASC NULLS LAST, so NULL = end of queue.
+            // This is the "demoted to the very end of the weekend" rule from the spec.
+            await client.query(
+                `UPDATE students SET individual_rank = NULL WHERE id = ANY($1::int[])`,
+                [memberIds]
+            );
+
+            // Unlink all members — they can re-form, but as lowest priority
             await client.query(
                 `UPDATE students SET group_id = NULL WHERE id = ANY($1::int[])`,
                 [memberIds]

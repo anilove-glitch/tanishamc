@@ -313,12 +313,20 @@ export const transferLeadership = async (groupId, newLeaderId) => {
     try {
         await client.query('BEGIN');
 
-        // Verify group exists
+        // Verify group exists and is in a mutable state
         const groupRes = await client.query(
-            `SELECT id FROM housing_groups WHERE id = $1`,
+            `SELECT id, status FROM housing_groups WHERE id = $1`,
             [groupId]
         );
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
+
+        const FROZEN_STATES = ['SOFT_LOCKED', 'HARD_LOCKED', 'ALLOCATED'];
+        if (FROZEN_STATES.includes(groupRes.rows[0].status)) {
+            throw new ApiError(400,
+                `Cannot transfer leadership — group is ${groupRes.rows[0].status}. ` +
+                'Leader titles are frozen after the Soft Lock.'
+            );
+        }
 
         // Verify new leader is a member of this group
         const memberRes = await client.query(

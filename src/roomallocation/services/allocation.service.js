@@ -391,7 +391,14 @@ class AllocationService {
     async forceAssignRoom({
         studentId,
         roomId,
+        hostelId,   // Required: used to enforce admin override gate
     }) {
+        // Admin override is blocked during LIVE_BATCHES (spec Phase 6)
+        if (hostelId) {
+            const { canAdminOverride } = await import('./phase.service.js');
+            await canAdminOverride(hostelId);
+        }
+
         const client = await pool.connect();
         try {
             await client.query('BEGIN');

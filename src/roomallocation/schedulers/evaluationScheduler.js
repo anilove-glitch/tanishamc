@@ -149,18 +149,30 @@ export async function recalculateGroupRanks(hostelId) {
 
     console.log(`[evaluationScheduler] Recalculating ranks for ${unrankedRes.rowCount} re-formed groups`);
 
+    // Find the currently ACTIVE batch for this hostel — re-formed groups need to join it
+    const activeBatchRes = await pool.query(
+        `SELECT id FROM batches WHERE hostel_id = $1 AND status = 'ACTIVE' LIMIT 1`,
+        [hostelId]
+    );
+    const activeBatchId = activeBatchRes.rows[0]?.id ?? null;
+
     let recalculated = 0;
     for (const group of unrankedRes.rows) {
-        if (group.leader_rank === null) continue; // Can't rank without a leader rank
+        if (group.leader_rank === null) continue;
 
         await pool.query(
-            `UPDATE housing_groups SET group_rank = $1 WHERE id = $2 AND group_rank IS NULL`,
-            [group.leader_rank, group.id]
+            `UPDATE housing_groups
+             SET group_rank = $1
+               ${activeBatchId ? ', batch_id = $3' : ''}
+             WHERE id = $2 AND group_rank IS NULL`,
+            activeBatchId
+                ? [group.leader_rank, group.id, activeBatchId]
+                : [group.leader_rank, group.id]
         );
         recalculated++;
     }
 
-    console.log(`[evaluationScheduler] Rank recalculation done: ${recalculated} groups updated`);
+    console.log(`[evaluationScheduler] Rank recalculation done: ${recalculated} groups updated, batch_id=${activeBatchId ?? 'none'}`);
     return { recalculated };
 }
 
