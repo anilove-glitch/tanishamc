@@ -8,6 +8,7 @@ dotenv.config();
 
 const router = express.Router();
 
+
 const ROLE_TABLES = {
     student: 'student',
     attendant: 'attendent',
@@ -397,38 +398,12 @@ router.post('/signup', async (req, res) => {
         // GENERATE JWT TOKEN
         // ======================================================
 
-        const token = jwt.sign(
-            {
-                id: user.id,
-                email: user.email,
-                role: data.role
-            },
-            process.env.JWT_SECRET,
-            {
-                expiresIn: '1h'
-            }
-        );
-
-        return res.status(201).json({
-            message: 'User created successfully',
-            user,
-            token
-        });
-
+        const token = jwt.sign({ id: user.id, email: user.email, role: data.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        return res.status(201).json({ message: 'User created successfully', user, token });
     } catch (err) {
 
         console.error(err);
-
-        // Duplicate email error
-        if (err.code === '23505') {
-            return res.status(409).json({
-                message: 'A user with this email already exists.'
-            });
-        }
-
-        return res.status(500).json({
-            message: 'Internal server error'
-        });
+        return res.status(500).json({ message: 'Internal server error' });
     }
 });
 
