@@ -7,6 +7,7 @@ import {
     getAllRequests,
     getAllGroups,
     getGroupMembers,
+    kickMember,
 } from '../services/group.service.js';
 
 /*
@@ -99,6 +100,22 @@ export const transferLeadershipController = async (req, res) => {
     try {
         const { groupId, newLeaderId } = req.body;
         const result = await transferLeadership(groupId, newLeaderId);
+        res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    }
+};
+
+/*
+=================================================
+KICK MEMBER
+=================================================
+*/
+
+export const kickMemberController = async (req, res) => {
+    try {
+        const { groupId, leaderId, memberId } = req.body;
+        const result = await kickMember(groupId, leaderId, memberId);
         res.status(200).json({ success: true, data: result });
     } catch (error) {
         res.status(error.statusCode || 500).json({ success: false, message: error.message });

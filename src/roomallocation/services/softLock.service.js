@@ -23,7 +23,7 @@
 
 import pool from '../../db/pool.js';
 import ApiError from '../../utils/apiError.js';
-import { BATCH_SIZE } from '../constants/testConfig.js';
+import { BATCH_SIZE, BATCH_DURATION_MS, TEST_MODE } from '../constants/testConfig.js';
 
 /**
  * Assign all FORMING groups for a hostel to PENDING batches,
@@ -43,12 +43,7 @@ export async function assignGroupsToBatches(hostelId) {
              FROM housing_group hg
              JOIN student s ON s.id = hg.primary_applicant_id
              WHERE hg.status = 'FORMING'
-               AND EXISTS (
-                   SELECT 1 FROM batch b
-                   WHERE b.hostel_id = $1
-               )
-             ORDER BY s.individual_rank ASC NULLS LAST`,
-            [hostelId]
+             ORDER BY s.individual_rank ASC NULLS LAST`
         );
 
         const groups = groupsRes.rows;
@@ -67,11 +62,26 @@ export async function assignGroupsToBatches(hostelId) {
 
         const batches = batchesRes.rows;
         if (batches.length === 0) {
-            await client.query('ROLLBACK');
-            throw new ApiError(400,
-                'No PENDING batches found for this hostel. ' +
-                'Create batches before triggering soft lock.'
-            );
+            const numBatches = Math.max(1, Math.ceil(groups.length / BATCH_SIZE));
+            console.log(`[softLock] Auto-creating ${numBatches} batches for hostel ${hostelId}.`);
+            
+            const batchDurationMinutes = Math.floor(BATCH_DURATION_MS / 60000);
+            const bufferMinutes = TEST_MODE ? 1 : 10; // short buffer before first batch
+            
+            for (let i = 0; i < numBatches; i++) {
+                const startOffset = bufferMinutes + (i * batchDurationMinutes);
+                const endOffset = startOffset + batchDurationMinutes;
+                
+                const newBatchRes = await client.query(
+                    `INSERT INTO batch (hostel_id, batch_number, status, start_time, end_time) 
+                     VALUES ($1, $2, 'PENDING', 
+                             NOW() + ($3 || ' minutes')::interval, 
+                             NOW() + ($4 || ' minutes')::interval) 
+                     RETURNING id, batch_number`,
+                    [hostelId, i + 1, startOffset, endOffset]
+                );
+                batches.push(newBatchRes.rows[0]);
+            }
         }
 
         let assigned = 0;

@@ -23,7 +23,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 
-const BASE = 'http://localhost:4000/api';
+const BASE = 'http://localhost:5000/api';
 const DB   = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },

@@ -102,7 +102,7 @@ const sortStudentsInRange = asyncHandler(async (req, res) => {
             s.email,
             s.phone,
             s.hostel,
-            s.room,
+            r.room_number AS room,
 
             o.id AS outpass_id,
             o.parent_contact,
@@ -119,6 +119,9 @@ const sortStudentsInRange = asyncHandler(async (req, res) => {
 
         JOIN outpass o
         ON o.student_id = s.id
+        
+        LEFT JOIN room r
+        ON s.physical_room_id = r.id
 
         WHERE
             o.departure_datetime
@@ -193,12 +196,15 @@ const getAllOutpassesByStatus = asyncHandler(async (req, res) => {
             s.email,
             s.phone,
             s.hostel,
-            s.room
+            r.room_number AS room
 
         FROM outpass o
 
         JOIN student s
         ON o.student_id = s.id
+        
+        LEFT JOIN room r
+        ON s.physical_room_id = r.id
 
         WHERE
             o.outp_status = $1

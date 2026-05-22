@@ -45,8 +45,13 @@ router.post('/apply', auth, async (req, res) => {
         const outpass = result.rows[0];
         return res.status(201).json({ message: 'Outpass application submitted successfully', outpass });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in apply outpass:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -61,8 +66,13 @@ router.get('/my-outpasses', auth, async (req, res) => {
         );
         return res.status(200).json({ outpasses: outpasses.rows });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in my-outpasses:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 
 });
@@ -92,8 +102,13 @@ router.put('/update-complaint', auth, async (req, res) => {
 
         return res.status(200).json({ message: 'Complaint updated successfully', complaint: result.rows[0] });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in update-complaint (outpass module):", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -119,8 +134,13 @@ router.put('/update-outpass', auth, async (req, res) => {
 
         return res.status(200).json({ message: 'Outpass updated successfully', outpass: result.rows[0] });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in update-outpass:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -143,8 +163,13 @@ router.get('/by-hostel', auth, async (req, res) => {
 
         return res.status(200).json({ outpasses: outpasses.rows });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in by-hostel outpasses:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -163,8 +188,13 @@ router.get('/all-approved', auth, async (req, res) => {
 
         return res.status(200).json({ outpasses: outpasses.rows });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in all-approved outpasses:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -187,8 +217,13 @@ router.get('/approved-by-hostel', auth, async (req, res) => {
 
         return res.status(200).json({ outpasses: outpasses.rows });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in approved-by-hostel outpasses:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -228,8 +263,13 @@ router.put('/record-entry', auth, async (req, res) => {
 
         return res.status(200).json({ message: `Outpass marked as ${action === 'exit' ? 'exited' : 'entered'}`, outpass: result.rows[0] });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in record-entry outpass:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -248,8 +288,13 @@ router.get('/monitor', async (req, res) => {
 
         return res.status(200).json({ outpasses: outpasses.rows });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in monitor outpasses:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 

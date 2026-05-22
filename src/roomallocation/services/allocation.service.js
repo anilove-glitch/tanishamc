@@ -320,10 +320,37 @@ class AllocationService {
     // =====================================================
 
     async getAllocationStatus(studentId) {
+        // Full join to get all fields the frontend needs
         const studentRes = await pool.query(`
-            SELECT s.*, hg.status as group_status, hg.batch_id
+            SELECT 
+                s.id, s.name, s.group_id, s.is_allotted, s.allocated_room_id,
+                s.individual_rank, s.cgpa,
+                hg.id                    AS hg_id,
+                hg.status                AS group_status,
+                hg.batch_id              AS group_batch_id,
+                hg.group_rank,
+                hg.is_rollover_priority,
+                hg.primary_applicant_id,
+                hg.rollover_count,
+                b.batch_number,
+                b.status                 AS batch_status,
+                b.start_time             AS batch_start_time,
+                b.end_time               AS batch_end_time,
+                b.hostel_id              AS batch_hostel_id,
+                h.id                     AS hostel_id,
+                h.current_phase          AS hostel_phase,
+                h.name                   AS hostel_name,
+                h.is_paused,
+                h.allocation_date,
+                h.lobby_opens_at,
+                r.room_number            AS allocated_room_number,
+                r.room_type              AS allocated_room_type,
+                r.max_capacity           AS allocated_room_capacity
             FROM student s
             LEFT JOIN housing_group hg ON s.group_id = hg.id
+            LEFT JOIN batch b ON hg.batch_id = b.id
+            LEFT JOIN hostel h ON b.hostel_id = h.id
+            LEFT JOIN room r ON s.allocated_room_id = r.id
             WHERE s.id = $1
         `, [studentId]);
 
@@ -335,22 +362,112 @@ class AllocationService {
 
         const student = studentRes.rows[0];
 
-        const assignmentRes = await pool.query(`
-            SELECT ra.*, row_to_json(r.*) as room
-            FROM room_assignment ra
-            JOIN room r ON ra.room_id = r.id
-            WHERE ra.student_id = $1 AND ra.assignment_status IN ('UPCOMING', 'ACTIVE')
-            LIMIT 1
-        `, [studentId]);
+        // If student has no group→batch→hostel, try to find ANY hostel
+        // (needed for ADMIN_MODE/pre-lobby state)
+        let hostelId = student.hostel_id;
+        let hostelPhase = student.hostel_phase;
+        let hostelName = student.hostel_name;
+        let isPaused = student.is_paused;
+        let allocationDate = student.allocation_date;
+        let lobbyOpensAt = student.lobby_opens_at;
 
-        const assignment = assignmentRes.rowCount > 0 ? assignmentRes.rows[0] : null;
+        if (!hostelId) {
+            const anyHostelRes = await pool.query(
+                'SELECT id, name, current_phase, is_paused, allocation_date, lobby_opens_at FROM hostel LIMIT 1'
+            );
+            if (anyHostelRes.rowCount > 0) {
+                const h = anyHostelRes.rows[0];
+                hostelId = h.id;
+                hostelPhase = h.current_phase;
+                hostelName = h.name;
+                isPaused = h.is_paused;
+                allocationDate = h.allocation_date;
+                lobbyOpensAt = h.lobby_opens_at;
+            }
+        }
+
+        // Derive current round from batch timing
+        let currentRound = null;
+        if (student.batch_status === 'ACTIVE' && student.batch_start_time) {
+            const now = new Date();
+            const startTime = new Date(student.batch_start_time);
+            const diffMs = now.getTime() - startTime.getTime();
+            const ROUND_DURATION_MS = 10 * 60 * 1000; // 10 minutes
+            const derivedRound = Math.floor(diffMs / ROUND_DURATION_MS) + 1;
+            currentRound = Math.min(Math.max(derivedRound, 1), 6);
+        }
+
+        // Check if submitted this round
+        let submittedThisRound = false;
+        if (student.group_batch_id && currentRound) {
+            const subRes = await pool.query(
+                `SELECT 1 FROM allocation_submission
+                 WHERE group_id = $1 AND batch_id = $2 AND round_number = $3
+                 LIMIT 1`,
+                [student.group_id, student.group_batch_id, currentRound]
+            );
+            submittedThisRound = subRes.rowCount > 0;
+        }
+
+        // Get roommates if allocated
+        let roommates = [];
+        if (student.is_allotted && student.allocated_room_id) {
+            const roommatesRes = await pool.query(
+                `SELECT s2.id, s2.name, s2.roll_no, s2.department, s2.cgpa
+                 FROM student s2
+                 WHERE s2.allocated_room_id = $1 AND s2.id != $2`,
+                [student.allocated_room_id, studentId]
+            );
+            roommates = roommatesRes.rows;
+        }
+
+        // Get assignment info (how room was assigned)
+        let assignedBy = null;
+        if (student.is_allotted && student.allocated_room_id) {
+            const assignRes = await pool.query(
+                `SELECT assigned_by FROM room_assignment
+                 WHERE student_id = $1 AND assignment_status IN ('UPCOMING', 'ACTIVE')
+                 LIMIT 1`,
+                [studentId]
+            );
+            if (assignRes.rowCount > 0) assignedBy = assignRes.rows[0].assigned_by;
+        }
 
         return {
-            studentId,
-            allotted: !!assignment,
-            room: assignment ? assignment.room : null,
-            groupStatus: student.group_status,
-            batchId: student.batch_id,
+            student_id:             studentId,
+            cgpa:                   student.cgpa ?? null,
+            individual_rank:        student.individual_rank ?? null,
+            // Phase info
+            hostel_id:              hostelId,
+            hostel_phase:           hostelPhase ?? 'ADMIN_MODE',
+            hostel_name:            hostelName,
+            is_paused:              isPaused ?? false,
+            allocation_date:        allocationDate,
+            lobby_opens_at:         lobbyOpensAt,
+            // Group info
+            group_id:               student.group_id ?? null,
+            group_status:           student.group_status ?? null,
+            is_leader:              student.group_id ? (student.primary_applicant_id === parseInt(studentId)) : false,
+            group_rank:             student.group_rank ?? null,
+            rollover_count:         student.rollover_count ?? 0,
+            is_rollover_priority:   student.is_rollover_priority ?? false,
+            // Batch info
+            batch_id:               student.group_batch_id ?? null,
+            batchNumber:            student.batch_number ?? null,
+            batch_is_active:        student.batch_status === 'ACTIVE',
+            batch_start_time:       student.batch_start_time ?? null,
+            batch_end_time:         student.batch_end_time ?? null,
+            // Round info
+            current_round:          currentRound,
+            submitted_this_round:   submittedThisRound,
+            // Allocation outcome
+            is_allotted:            student.is_allotted ?? false,
+            allocated_room_id:      student.allocated_room_id ?? null,
+            allocated_room_number:  student.allocated_room_number ?? null,
+            allocated_room_type:    student.allocated_room_type ?? null,
+            allocated_room_capacity: student.allocated_room_capacity ?? null,
+            assigned_by:            assignedBy,
+            roommates,
         };
     }
 

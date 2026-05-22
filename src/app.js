@@ -10,10 +10,13 @@ import roomRoutes from "./roomallocation/rooms/rooms.routes.js";
 import hostelRoutes from "./roomallocation/hostels/hostels.routes.js";
 import preferenceRoutes from "./roomallocation/preferences/preferences.routes.js";
 import allocationRoutes from "./roomallocation/allocation.routes.js";
+import adminRoutes from "./roomallocation/admin/admin.routes.js";
 
 import outpassRoutes from "./routes/outpass.routes.js";
 import studentRoutes from "./routes/student.routes.js"
 import authRoutes from "../working-routes/auth.js";
+import complaintRoutesWorking from "../working-routes/complaint.js";
+import outpassRoutesWorking from "../working-routes/outpass.js";
 
 const app = express();
 
@@ -108,9 +111,13 @@ API ROUTES
 
 // Auth Routes
 app.use(
-    "/api/auth",
+    "/auth",
     authRoutes
 );
+
+// Working Complaint and Outpass Routes
+app.use("/complaint", complaintRoutesWorking);
+app.use("/outpass", outpassRoutesWorking);
 
 // Outpass Routes
 app.use(
@@ -127,6 +134,7 @@ app.use("/api/rooms", roomRoutes);
 app.use("/api/hostels", hostelRoutes);
 app.use("/api/preferences", preferenceRoutes);
 app.use("/api/allocation", allocationRoutes);
+app.use("/api/admin", adminRoutes);
 
 /*
 =================================================

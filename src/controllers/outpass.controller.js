@@ -511,7 +511,7 @@ const getPendingOutpasses = asyncHandler(async (req, res) => {
             s.roll_no,
             s.phone,
             s.department,
-            s.room,
+            r.room_number AS room,
             s.hostel,
             s.hostel_id
 
@@ -519,6 +519,9 @@ const getPendingOutpasses = asyncHandler(async (req, res) => {
 
         JOIN student s
         ON o.student_id = s.id
+        
+        LEFT JOIN room r
+        ON s.physical_room_id = r.id
 
         WHERE
             o.outp_status = 'Pending'
@@ -1052,7 +1055,7 @@ const monitorDashboard = asyncHandler(async (req, res) => {
             s.department,
             s.email,
             s.phone,
-            s.room,
+            r.room_number AS room,
             s.hostel,
             s.hostel_id
 
@@ -1060,6 +1063,9 @@ const monitorDashboard = asyncHandler(async (req, res) => {
 
         JOIN student s
         ON o.student_id = s.id
+        
+        LEFT JOIN room r
+        ON s.physical_room_id = r.id
 
         ORDER BY o.created_at DESC;
     `;

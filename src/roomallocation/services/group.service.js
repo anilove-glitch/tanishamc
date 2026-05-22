@@ -10,14 +10,52 @@ export const createGroup = async (primaryApplicantId) => {
         await client.query('BEGIN');
 
         // Check if student already in a group
-        const studentRes = await client.query(`SELECT group_id FROM student WHERE id = $1`, [primaryApplicantId]);
+        const studentRes = await client.query(`SELECT group_id, hostel_id, individual_rank FROM student WHERE id = $1`, [primaryApplicantId]);
         if (studentRes.rows.length === 0) throw new ApiError(404, 'Student not found');
-        if (studentRes.rows[0].group_id) throw new ApiError(400, 'Student is already in a group');
+        const student = studentRes.rows[0];
+        if (student.group_id) throw new ApiError(400, 'Student is already in a group');
+
+        // Check hostel phase
+        const hostelRes = await client.query(`SELECT current_phase FROM hostel WHERE id = $1`, [student.hostel_id]);
+        const currentPhase = hostelRes.rows[0].current_phase;
+
+        let status = 'FORMING';
+        let batchId = null;
+
+        if (currentPhase === 'SOFT_LOCK' || currentPhase === 'LIVE_BATCHES') {
+            // Dynamic late batch assignment
+            const batchesRes = await client.query(`
+                SELECT b.id, b.status, b.batch_number, COALESCE(MAX(s.individual_rank), 0) AS max_rank
+                FROM batch b
+                LEFT JOIN housing_group hg ON hg.batch_id = b.id
+                LEFT JOIN student s ON s.id = hg.primary_applicant_id
+                WHERE b.hostel_id = $1
+                GROUP BY b.id, b.batch_number
+                ORDER BY b.batch_number ASC
+            `, [student.hostel_id]);
+
+            let idealBatchIndex = batchesRes.rows.findIndex(b => parseInt(b.max_rank) >= student.individual_rank || parseInt(b.max_rank) === 0);
+            
+            if (idealBatchIndex === -1 && batchesRes.rows.length > 0) {
+                idealBatchIndex = batchesRes.rows.length - 1; // Fallback to last batch if rank is worse than all
+            }
+
+            if (idealBatchIndex !== -1) {
+                // Find next available pending batch
+                for (let i = idealBatchIndex; i < batchesRes.rows.length; i++) {
+                    if (batchesRes.rows[i].status === 'PENDING') {
+                        batchId = batchesRes.rows[i].id;
+                        status = 'SOFT_LOCKED';
+                        break;
+                    }
+                }
+            }
+        }
 
         // Create group
         const groupRes = await client.query(
-            `INSERT INTO housing_group (primary_applicant_id, status) VALUES ($1, 'FORMING') RETURNING *`,
-            [primaryApplicantId]
+            `INSERT INTO housing_group (primary_applicant_id, status, batch_id) VALUES ($1, $2, $3) RETURNING *`,
+            [primaryApplicantId, status, batchId]
         );
         const group = groupRes.rows[0];
 
@@ -43,7 +81,7 @@ export const createGroup = async (primaryApplicantId) => {
  */
 export const getGroupDetails = async (groupId) => {
     try {
-        const groupRes = await pool.query(`SELECT * FROM v_housing_groups_with_size WHERE id = $1`, [groupId]);
+        const groupRes = await pool.query(`SELECT * FROM v_housing_group_with_size WHERE id = $1`, [groupId]);
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
 
         const membersRes = await pool.query(
@@ -254,7 +292,14 @@ export const updateGroupStatus = async (groupId, status) => {
 export const getAllRequests = async () => {
     try {
         const result = await pool.query(
-            `SELECT * FROM group_request ORDER BY created_at DESC`
+            `SELECT gr.*, 
+                    s.name as student_name, 
+                    ls.name as leader_name 
+             FROM group_request gr
+             LEFT JOIN student s ON gr.student_id = s.id
+             LEFT JOIN housing_group hg ON gr.group_id = hg.id
+             LEFT JOIN student ls ON hg.primary_applicant_id = ls.id
+             ORDER BY gr.created_at DESC`
         );
         return result.rows;
     } catch (error) {
@@ -268,7 +313,10 @@ export const getAllRequests = async () => {
 export const getAllGroups = async () => {
     try {
         const result = await pool.query(
-            `SELECT * FROM v_housing_groups_with_size ORDER BY id`
+            `SELECT h.*, s.name as leader_name 
+             FROM v_housing_group_with_size h
+             LEFT JOIN student s ON h.primary_applicant_id = s.id
+             ORDER BY h.id`
         );
         return result.rows;
     } catch (error) {
@@ -282,7 +330,7 @@ export const getAllGroups = async () => {
 export const getGroupMembers = async (groupId) => {
     try {
         const groupRes = await pool.query(
-            `SELECT * FROM v_housing_groups_with_size WHERE id = $1`,
+            `SELECT * FROM v_housing_group_with_size WHERE id = $1`,
             [groupId]
         );
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
@@ -348,6 +396,50 @@ export const transferLeadership = async (groupId, newLeaderId) => {
         await client.query('ROLLBACK').catch(() => {});
         if (error instanceof ApiError) throw error;
         throw new ApiError(500, 'Error transferring leadership: ' + error.message);
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Kick a member from the group (Leader only action)
+ */
+export const kickMember = async (groupId, leaderId, memberId) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const groupRes = await client.query(
+            `SELECT id, status, primary_applicant_id FROM housing_group WHERE id = $1`,
+            [groupId]
+        );
+        if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
+        
+        const group = groupRes.rows[0];
+        if (parseInt(group.primary_applicant_id) !== parseInt(leaderId)) {
+            throw new ApiError(403, 'Only the leader can kick members');
+        }
+        if (parseInt(leaderId) === parseInt(memberId)) {
+            throw new ApiError(400, 'Leader cannot kick themselves. Use leave group instead.');
+        }
+
+        const FROZEN_STATES = ['SOFT_LOCKED', 'HARD_LOCKED', 'ALLOCATED'];
+        if (FROZEN_STATES.includes(group.status)) {
+            throw new ApiError(400, `Cannot kick members — group is ${group.status}.`);
+        }
+
+        // Remove the member
+        await client.query(
+            `UPDATE student SET group_id = NULL WHERE id = $1 AND group_id = $2`,
+            [memberId, groupId]
+        );
+
+        await client.query('COMMIT');
+        return { success: true, message: 'Member kicked successfully' };
+    } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(500, 'Error kicking member: ' + error.message);
     } finally {
         client.release();
     }

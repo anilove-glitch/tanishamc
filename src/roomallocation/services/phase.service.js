@@ -73,6 +73,16 @@ export const setCurrentPhase = async (hostelId, newPhase) => {
     if (hostel.current_phase === SYSTEM_PHASES.LOBBY && newPhase === SYSTEM_PHASES.SOFT_LOCK) {
         try {
             await assignGroupsToBatches(hostelId);
+            // Newly created pending batches must be armed immediately,
+            // otherwise they stay PENDING forever until next server restart.
+            const pendingRes = await pool.query(
+                `SELECT id FROM batch WHERE hostel_id = $1 AND status = 'PENDING' ORDER BY start_time ASC`,
+                [hostelId]
+            );
+            const { scheduleBatch } = await import('../schedulers/batchScheduler.js');
+            for (const row of pendingRes.rows) {
+                await scheduleBatch(row.id);
+            }
         } catch (err) {
             // Log but don't roll back the phase change — admin can retry batch assignment
             console.error('[phase.service] softLock batch assignment error:', err.message);

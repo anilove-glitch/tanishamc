@@ -9,7 +9,8 @@ import {
     transferLeadershipController,
     getAllRequestsController,
     getAllGroupsController,
-    getGroupMembersController
+    getGroupMembersController,
+    kickMemberController
 } from "./groups.controller.js";
 
 const router = express.Router();
@@ -68,6 +69,17 @@ TRANSFER LEADERSHIP
 router.post(
     "/transfer-leadership",
     transferLeadershipController
+);
+
+/*
+=================================================
+KICK MEMBER
+=================================================
+*/
+
+router.post(
+    "/kick",
+    kickMemberController
 );
 
 /*
