@@ -11,6 +11,7 @@ import hostelRoutes from "./roomallocation/hostels/hostels.routes.js";
 import preferenceRoutes from "./roomallocation/preferences/preferences.routes.js";
 import allocationRoutes from "./roomallocation/allocation.routes.js";
 import adminRoutes from "./roomallocation/admin/admin.routes.js";
+import wardenRoutes from "./roomallocation/first-year-allocation/warden.routes.js";
 
 import outpassRoutes from "./routes/outpass.routes.js";
 import studentRoutes from "./routes/student.routes.js"
@@ -135,6 +136,7 @@ app.use("/api/hostels", hostelRoutes);
 app.use("/api/preferences", preferenceRoutes);
 app.use("/api/allocation", allocationRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/warden", wardenRoutes);
 
 /*
 =================================================
