@@ -1,165 +1,460 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import pool from '../src/db/db.js';
+import bcrypt from 'bcryptjs';
+import pool from '../src/db/pool.js';
 import auth from '../src/middleware/middleware.js';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 const router = express.Router();
+
 
 const ROLE_TABLES = {
     student: 'student',
     attendant: 'attendent',
     guard: 'guard',
+    warden: 'admins',
 };
+
+// ======================================================
+// VERIFY LOGIN TOKEN
+// ======================================================
 
 router.get('/login', (req, res) => {
     const authHeader = req.headers.authorization || '';
+
     const token = authHeader.startsWith('Bearer ')
         ? authHeader.slice(7)
         : req.headers.token;
+
     const { role } = req.headers;
 
     if (!token || !role) {
-        return res.status(400).json({ message: 'Token and role are required' });
+        return res.status(400).json({
+            message: 'Token and role are required'
+        });
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET
+        );
 
         if (decoded.role !== role) {
-            return res.status(401).json({ message: 'Unauthorized' });
+            return res.status(401).json({
+                message: 'Unauthorized'
+            });
         }
 
-        return res.status(200).json({ message: 'Token is valid', user: decoded });
+        return res.status(200).json({
+            message: 'Token is valid',
+            user: decoded
+        });
+
     } catch (err) {
-        return res.status(401).json({ message: 'Invalid token' });
+        return res.status(401).json({
+            message: 'Invalid token'
+        });
     }
 });
+
+
+// ======================================================
+// LOGIN
+// ======================================================
 
 router.post('/login', async (req, res) => {
     const { email, password, role } = req.body;
 
     if (!email || !password || !role) {
-        return res.status(400).json({ message: 'Email, password and role are required' });
+        return res.status(400).json({
+            message: 'Email, password and role are required'
+        });
     }
 
     const tableName = ROLE_TABLES[role];
 
     if (!tableName) {
-        return res.status(400).json({ message: 'Invalid role' });
+        return res.status(400).json({
+            message: 'Invalid role'
+        });
     }
 
     try {
+
         const result = await pool.query(
-            `SELECT * FROM ${tableName} WHERE email = $1 AND password = $2 LIMIT 1`,
-            [email, password]
+            `SELECT * FROM ${tableName}
+             WHERE email = $1
+             LIMIT 1`,
+            [email]
         );
 
         const user = result.rows[0];
 
         if (!user) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        }
+
+        const storedPassword = user.password_hash ?? user.password;
+        const passwordMatch = await bcrypt.compare(password, storedPassword);
+        if (!passwordMatch) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
         }
 
         const token = jwt.sign(
-            { id: user.id, email: user.email, role },
+            {
+                id: user.id,
+                email: user.email,
+                role
+            },
             process.env.JWT_SECRET,
-            { expiresIn: '1h' }
+            {
+                expiresIn: '1h'
+            }
         );
 
-        return res.status(200).json({ message: 'Login successful', user, token });
+        return res.status(200).json({
+            message: 'Login successful',
+            user,
+            token
+        });
+
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Login error:", err);
+
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
+
+// ======================================================
+// CURRENT USER
+// ======================================================
+
 router.get('/me', auth, async (req, res) => {
+
     const { id, email, role } = req.user;
+
     const tableName = ROLE_TABLES[role];
 
     if (!tableName) {
-        return res.status(400).json({ message: 'Invalid role' });
+        return res.status(400).json({
+            message: 'Invalid role'
+        });
     }
 
     try {
+
         const result = await pool.query(
-            `SELECT * FROM ${tableName} WHERE id = $1 AND email = $2 LIMIT 1`,
+            `SELECT * FROM ${tableName}
+             WHERE id = $1 AND email = $2
+             LIMIT 1`,
             [id, email]
         );
 
         const user = result.rows[0];
 
         if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+            return res.status(404).json({
+                message: 'User not found'
+            });
         }
 
-        return res.status(200).json({ user, role });
+        return res.status(200).json({
+            user,
+            role
+        });
+
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in /me:", err);
+
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
+
+// ======================================================
+// SIGNUP
+// ======================================================
+
 router.post('/signup', async (req, res) => {
+
     const data = req.body;
 
     if (!data || !data.role) {
-        return res.status(400).json({ message: 'Role is required' });
+        return res.status(400).json({
+            message: 'Role is required'
+        });
     }
 
     try {
+
         let result;
         let user;
 
+        // ======================================================
+        // STUDENT SIGNUP
+        // ======================================================
+
         if (data.role === 'student') {
-            const { name, email, password, room, phone, department, hostel } = data;
-            if (!name || !email || !password || !room || !phone || !department || !hostel) {
-                return res.status(400).json({ message: 'Missing required fields for student' });
+
+            const {
+                name,
+                email,
+                password,
+                phone,
+                department,
+                rollno,
+                hostel
+            } = data;
+
+            const missingFields = [];
+            if (!name) missingFields.push('name');
+            if (!email) missingFields.push('email');
+            if (!password) missingFields.push('password');
+            if (!phone) missingFields.push('phone');
+            if (!department) missingFields.push('department');
+            if (!rollno) missingFields.push('rollno');
+            if (!hostel) missingFields.push('hostel');
+
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    message: `Missing required fields for student: ${missingFields.join(', ')}`
+                });
             }
-            result = await pool.query(
-                'INSERT INTO student (name, email, password, hostel, room, phone, department) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-                [name, email, password, hostel, room, phone, department]
+
+            // Find hostel
+            const hostelResult = await pool.query(
+                `SELECT id, name
+                 FROM hostel
+                 WHERE name = $1
+                 LIMIT 1`,
+                [hostel]
             );
-            user = result.rows[0];
-        } else if (data.role === 'attendant') {
-            const { name, email, password, hostel ,phone } = data;
-            if (!name || !email || !password || !phone || !hostel) {
-                return res.status(400).json({ message: 'Missing required fields for attendant' });
+
+            if (hostelResult.rows.length === 0) {
+                return res.status(404).json({
+                    message: 'Hostel not found. Pick one of the available hostels.'
+                });
             }
+
+            const hostelData = hostelResult.rows[0];
+            const hashedPassword = await bcrypt.hash(password, 10);
+
             result = await pool.query(
-                'INSERT INTO attendent (name, email, password, hostel , phone) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-                [name, email, password, hostel,phone]
-            );
+    `INSERT INTO student
+    (
+        name,
+        email,
+        password,
+        hostel,
+        hostel_id,
+        roll_no,
+        phone,
+        department
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    RETURNING *`,
+    [
+        name,
+        email,
+        hashedPassword,
+        hostelData.name,
+        hostelData.id,
+        rollno,
+        phone,
+        department
+    ]
+);
+
             user = result.rows[0];
-        } else if (data.role === 'guard') {
-            const { name, email, password, phone } = data;
-            if (!name || !email || !password || !phone) {
-                return res.status(400).json({ message: 'Missing required fields for guard' });
-            }
-            result = await pool.query(
-                'INSERT INTO guard (name, email, password, phone) VALUES ($1,$2,$3,$4) RETURNING *',
-                [name, email, password, phone]
-            );
-            user = result.rows[0];
-        } else {
-            return res.status(400).json({ message: 'Invalid role' });
         }
+
+        // ======================================================
+        // ATTENDANT SIGNUP
+        // ======================================================
+
+        else if (data.role === 'attendant') {
+
+            const {
+                name,
+                email,
+                password,
+                hostel,
+                phone
+            } = data;
+
+            const missingFields = [];
+            if (!name) missingFields.push('name');
+            if (!email) missingFields.push('email');
+            if (!password) missingFields.push('password');
+            if (!phone) missingFields.push('phone');
+            if (!hostel) missingFields.push('hostel');
+
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    message: `Missing required fields for attendant: ${missingFields.join(', ')}`
+                });
+            }
+
+            // Find hostel
+            const hostelResult = await pool.query(
+                `SELECT id, name
+                 FROM hostel
+                 WHERE name = $1
+                 LIMIT 1`,
+                [hostel]
+            );
+
+            if (hostelResult.rows.length === 0) {
+                return res.status(404).json({
+                    message: 'Hostel not found'
+                });
+            }
+
+            const hostelData = hostelResult.rows[0];
+
+            const hashedPasswordAttendant = await bcrypt.hash(password, 10);
+
+            result = await pool.query(
+                `INSERT INTO attendent
+                (
+                    name,
+                    email,
+                    password,
+                    hostel,
+                    hostel_id,
+                    phone
+                )
+                VALUES ($1,$2,$3,$4,$5,$6)
+                RETURNING *`,
+                [
+                    name,
+                    email,
+                    hashedPasswordAttendant,
+                    hostelData.name,
+                    hostelData.id,
+                    phone
+                ]
+            );
+
+            user = result.rows[0];
+        }
+
+        // ======================================================
+        // GUARD SIGNUP
+        // ======================================================
+
+        else if (data.role === 'guard') {
+
+            const {
+                name,
+                email,
+                password,
+                phone
+            } = data;
+
+            const missingFields = [];
+            if (!name) missingFields.push('name');
+            if (!email) missingFields.push('email');
+            if (!password) missingFields.push('password');
+            if (!phone) missingFields.push('phone');
+
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    message: `Missing required fields for guard: ${missingFields.join(', ')}`
+                });
+            }
+
+            const hashedPasswordGuard = await bcrypt.hash(password, 10);
+
+            result = await pool.query(
+                `INSERT INTO guard
+                (
+                    name,
+                    email,
+                    password,
+                    phone
+                )
+                VALUES ($1,$2,$3,$4)
+                RETURNING *`,
+                [
+                    name,
+                    email,
+                    hashedPasswordGuard,
+                    phone
+                ]
+            );
+
+            user = result.rows[0];
+        }
+
+        // ======================================================
+        // INVALID ROLE
+        // ======================================================
+
+        else {
+            return res.status(400).json({
+                message: 'Invalid role'
+            });
+        }
+
+        // ======================================================
+        // GENERATE JWT TOKEN
+        // ======================================================
 
         const token = jwt.sign({ id: user.id, email: user.email, role: data.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
         return res.status(201).json({ message: 'User created successfully', user, token });
-        
     } catch (err) {
-        console.error(err);
-        
-        // This catches the PostgreSQL unique constraint violation (duplicate email)
+        console.error("Signup error:", err);
+
+        // Handle specific Postgres duplicate key constraint violations (e.g. email or roll number already exists)
         if (err.code === '23505') {
-            return res.status(409).json({ message: 'A user with this email already exists.' });
+            let detailMessage = 'Email or roll number already exists.';
+            if (err.detail) {
+                detailMessage = err.detail;
+            }
+            return res.status(409).json({
+                message: 'Duplicate key violation: User already exists.',
+                detail: detailMessage,
+                code: err.code
+            });
         }
 
-        return res.status(500).json({ message: 'Internal server error' });
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
+});
+
+
+// ======================================================
+// LOGOUT
+// ======================================================
+
+router.post('/logout', (req, res) => {
+    return res.status(200).json({
+        message: 'Logout successful'
+    });
 });
 
 export default router;
