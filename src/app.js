@@ -14,7 +14,8 @@ import adminRoutes from "./roomallocation/admin/admin.routes.js";
 import wardenRoutes from "./roomallocation/first-year-allocation/warden.routes.js";
 
 import outpassRoutes from "./routes/outpass.routes.js";
-import studentRoutes from "./routes/student.routes.js"
+import studentRoutes from "./routes/student.routes.js";
+import complaintRoutes from '../working-routes/complaint.js';
 import authRoutes from "../working-routes/auth.js";
 import complaintRoutesWorking from "../working-routes/complaint.js";
 import outpassRoutesWorking from "../working-routes/outpass.js";
@@ -126,8 +127,17 @@ app.use(
     outpassRoutes
 );
 
-// student routes
-app.use("/api/students", studentRoutes);
+// Complaint Routes
+app.use(
+    "/api/complaints",
+    complaintRoutes
+);
+
+// Student Routes
+app.use(
+    "/api/students",
+    studentRoutes
+);
 
 // === Our Room Allocation Routes ===
 app.use("/api/groups", groupRoutes);

@@ -9,7 +9,7 @@ const auth = async (req, res, next) => {
     const { role } = req.headers;
 
     if (!token || !role) {
-        return res.status(400).json({ message: 'Token and role are required' });
+        return res.status(401).json({ message: 'Token and role are required' });
     }
 
     try {
