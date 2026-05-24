@@ -5,7 +5,8 @@ import cookieParser from "cookie-parser";
 import pool from "./db/pool.js";
 
 import outpassRoutes from "./routes/outpass.routes.js";
-import studentRoutes from "./routes/student.routes.js"
+import studentRoutes from "./routes/student.routes.js";
+import complaintRoutes from '../working-routes/complaint.js';
 import authRoutes from "../working-routes/auth.js";
 
 const app = express();
@@ -118,8 +119,18 @@ app.use(
     outpassRoutes
 );
 
-// student routes
-app.use("/api/students", studentRoutes);
+// Complaint Routes
+app.use(
+    "/api/complaints",
+    complaintRoutes
+);
+
+// Student Routes
+app.use(
+    "/api/students",
+    studentRoutes
+);
+
 /*
 =================================================
 404 ROUTE HANDLER
