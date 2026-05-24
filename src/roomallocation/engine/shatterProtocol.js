@@ -22,6 +22,24 @@ import { findLargestAvailableRoom } from './roomSelector.js';
 import { logShatter } from './allocationLogger.js';
 import pool from '../../db/pool.js';
 
+async function ensureShatterHistoryTable(client) {
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS group_shatter_history (
+            id BIGSERIAL PRIMARY KEY,
+            student_id INTEGER NOT NULL REFERENCES student(id) ON DELETE CASCADE,
+            hostel_id UUID NOT NULL REFERENCES hostel(id) ON DELETE CASCADE,
+            source_group_id UUID REFERENCES housing_group(id) ON DELETE SET NULL,
+            shattered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            consumed_at TIMESTAMPTZ NULL
+        )
+    `);
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_shatter_history_student_hostel_active
+        ON group_shatter_history (student_id, hostel_id, consumed_at, shattered_at DESC)
+    `);
+}
+
 // ─────────────────────────────────────────────────────────
 // MAIN ENTRY POINT
 // ─────────────────────────────────────────────────────────
@@ -111,6 +129,16 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
         );
         const memberIds = membersRes.rows.map(r => r.id);
 
+        // Resolve hostel for shatter exception tracking.
+        const hostelRes = await client.query(
+            `SELECT b.hostel_id
+             FROM housing_group hg
+             LEFT JOIN batch b ON b.id = hg.batch_id
+             WHERE hg.id = $1`,
+            [groupId]
+        );
+        const hostelId = hostelRes.rows[0]?.hostel_id ?? null;
+
         // ── Mark SHATTERED first (before unlinking) ───────────
         // Prevents handle_primary_applicant_leave from auto-deleting
         // the group when the last member is unlinked.
@@ -118,6 +146,17 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
             `UPDATE housing_group SET status = 'SHATTERED' WHERE id = $1`,
             [groupId]
         );
+
+        // Record one-time "allowed to re-form after soft lock" tokens.
+        if (hostelId && memberIds.length > 0) {
+            await ensureShatterHistoryTable(client);
+            await client.query(
+                `INSERT INTO group_shatter_history (student_id, hostel_id, source_group_id, shattered_at)
+                 SELECT x.student_id, $2::uuid, $3::uuid, NOW()
+                 FROM unnest($1::int[]) AS x(student_id)`,
+                [memberIds, hostelId, groupId]
+            );
+        }
 
         if (memberIds.length > 0) {
             await lockStudents(client, memberIds);
@@ -130,6 +169,6 @@ async function _shatterGroup(groupId, groupSize, largestAvailableBeds) {
             );
         }
 
-        await logShatter({ groupId, groupSize, largestAvailableBeds, client });
+        await logShatter({ groupId, groupSize, largestAvailableBeds, memberIds, client });
     });
 }

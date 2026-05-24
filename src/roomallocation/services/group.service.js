@@ -1,6 +1,24 @@
 import pool from '../../db/pool.js';
 import ApiError from '../../utils/apiError.js';
 
+async function ensureShatterHistoryTable(client) {
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS group_shatter_history (
+            id BIGSERIAL PRIMARY KEY,
+            student_id INTEGER NOT NULL REFERENCES student(id) ON DELETE CASCADE,
+            hostel_id UUID NOT NULL REFERENCES hostel(id) ON DELETE CASCADE,
+            source_group_id UUID REFERENCES housing_group(id) ON DELETE SET NULL,
+            shattered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            consumed_at TIMESTAMPTZ NULL
+        )
+    `);
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_group_shatter_history_student_hostel_active
+        ON group_shatter_history (student_id, hostel_id, consumed_at, shattered_at DESC)
+    `);
+}
+
 /**
  * Create a new housing group
  */
@@ -21,8 +39,32 @@ export const createGroup = async (primaryApplicantId) => {
 
         let status = 'FORMING';
         let batchId = null;
+        let shatterExceptionId = null;
 
         if (currentPhase === 'SOFT_LOCK' || currentPhase === 'LIVE_BATCHES') {
+            // Strict gate: after soft lock, new group creation is blocked unless
+            // this student was recently shattered by the engine.
+            await ensureShatterHistoryTable(client);
+            const shatterRes = await client.query(
+                `SELECT id
+                 FROM group_shatter_history
+                 WHERE student_id = $1
+                   AND hostel_id = $2
+                   AND consumed_at IS NULL
+                 ORDER BY shattered_at DESC
+                 LIMIT 1`,
+                [primaryApplicantId, student.hostel_id]
+            );
+
+            if (shatterRes.rowCount === 0) {
+                throw new ApiError(
+                    403,
+                    'New group creation is disabled after Soft Lock. You can only join existing groups unless your previous group was shattered.'
+                );
+            }
+
+            shatterExceptionId = shatterRes.rows[0].id;
+
             // Dynamic late batch assignment
             const batchesRes = await client.query(`
                 SELECT b.id, b.status, b.batch_number, COALESCE(MAX(s.individual_rank), 0) AS max_rank
@@ -64,6 +106,16 @@ export const createGroup = async (primaryApplicantId) => {
             `UPDATE student SET group_id = $1 WHERE id = $2`,
             [group.id, primaryApplicantId]
         );
+
+        // Consume one shatter exception token for this post-soft-lock creation.
+        if (shatterExceptionId) {
+            await client.query(
+                `UPDATE group_shatter_history
+                 SET consumed_at = NOW()
+                 WHERE id = $1`,
+                [shatterExceptionId]
+            );
+        }
 
         await client.query('COMMIT');
         return group;

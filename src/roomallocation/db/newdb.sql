@@ -63,6 +63,12 @@ CREATE TYPE assignment_status_enum AS ENUM (
     'PAST'
 );
 
+CREATE TYPE room_type_enum AS ENUM (
+    'Student',
+    'Guest',
+    'Reserved'
+);
+
 
 -- =========================================================
 -- 2. CORE INFRASTRUCTURE
@@ -91,10 +97,11 @@ CREATE TABLE room (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     hostel_id UUID NOT NULL REFERENCES hostel(id) ON DELETE RESTRICT,
     room_number VARCHAR(50) NOT NULL,
-    room_type VARCHAR(50),
-    max_capacity INT NOT NULL CHECK (max_capacity IN (1,2,3,4)),
+    block VARCHAR(50) DEFAULT NULL,
+    room_type room_type_enum,
+    max_capacity INT NOT NULL CHECK (max_capacity IN (1,2,3,4,5,6)),
     current_occupancy INT DEFAULT 0 CHECK (current_occupancy >= 0 AND current_occupancy <= max_capacity),
-    UNIQUE(hostel_id, room_number)
+    UNIQUE(hostel_id, block, room_number)
 );
 
 CREATE TABLE batch (

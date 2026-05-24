@@ -21,12 +21,14 @@
 import 'dotenv/config';
 import axios from 'axios';
 import jwt from 'jsonwebtoken';
-import { io } from 'socket.io-client';
+import Pusher from 'pusher-js/node';
 import pool from '../../db/pool.js';
 
 const HOSTEL_NAME = 'Ganga Hostel';
-const WS_URL = process.env.E2E_WS_URL ?? 'http://localhost:5000';
 const API_URL = process.env.E2E_API_URL ?? 'http://localhost:5000/api';
+const PUSHER_KEY = process.env.E2E_PUSHER_KEY ?? process.env.PUSHER_KEY;
+const PUSHER_CLUSTER = process.env.E2E_PUSHER_CLUSTER ?? process.env.PUSHER_CLUSTER;
+const GLOBAL_CHANNEL = process.env.E2E_PUSHER_GLOBAL_CHANNEL ?? 'allocation-global';
 const http = axios.create({ timeout: 30000 });
 
 const WS_EVENTS = [
@@ -318,40 +320,52 @@ async function createGroups(client, hostelId) {
 }
 
 async function connectSocket(hostelId, wsLog) {
-  const socket = io(WS_URL, {
-    transports: ['websocket', 'polling'],
-    timeout: 8000,
-    reconnectionAttempts: 2,
-  });
-
-  for (const event of WS_EVENTS) {
-    socket.on(event, (payload) => {
-      const entry = {
-        ts: new Date().toISOString(),
-        event,
-        payload,
-      };
-      wsLog.push(entry);
-      console.log(`[WS] ${entry.ts} ${event} ${JSON.stringify(payload)}`);
-    });
+  if (!PUSHER_KEY || !PUSHER_CLUSTER) {
+    throw new Error('Missing PUSHER_KEY or PUSHER_CLUSTER for E2E realtime tracing');
   }
 
-  socket.on('connect_error', (err) => {
-    console.error('[WS] connect_error:', err.message);
+  const pusher = new Pusher(PUSHER_KEY, {
+    cluster: PUSHER_CLUSTER,
+  });
+
+  const attachListeners = (channel) => {
+    for (const event of WS_EVENTS) {
+      channel.bind(event, (payload) => {
+        const entry = {
+          ts: new Date().toISOString(),
+          event,
+          payload,
+        };
+        wsLog.push(entry);
+        console.log(`[WS] ${entry.ts} ${event} ${JSON.stringify(payload)}`);
+      });
+    }
+  };
+
+  const globalChannel = pusher.subscribe(GLOBAL_CHANNEL);
+  const hostelChannel = pusher.subscribe(`hostel-${hostelId}`);
+  attachListeners(globalChannel);
+  attachListeners(hostelChannel);
+
+  pusher.connection.bind('error', (err) => {
+    const msg = err?.error?.message ?? 'Unknown Pusher error';
+    console.error('[WS] connect_error:', msg);
   });
 
   await Promise.race([
-    new Promise((resolve) => {
-      socket.on('connect', () => {
-        socket.emit('join_hostel', { hostelId });
-        ok(`Socket connected (${socket.id}) and joined hostel room ${hostelId}`);
+    new Promise((resolve, reject) => {
+      hostelChannel.bind('pusher:subscription_succeeded', () => {
+        ok(`Pusher subscribed to ${GLOBAL_CHANNEL} and hostel-${hostelId}`);
         resolve();
       });
+      hostelChannel.bind('pusher:subscription_error', (status) => {
+        reject(new Error(`Pusher subscription failed with status ${status}`));
+      });
     }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Socket connect timeout')), 10000)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Pusher subscription timeout')), 10000)),
   ]);
 
-  return socket;
+  return pusher;
 }
 
 function eventCount(wsLog, eventName) {
