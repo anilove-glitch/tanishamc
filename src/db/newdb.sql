@@ -63,6 +63,12 @@ CREATE TYPE assignment_status_enum AS ENUM (
     'PAST'
 );
 
+CREATE TYPE room_type_enum AS ENUM (
+    'Student',
+    'Guest',
+    'Reserved'
+);
+
 
 -- =========================================================
 -- 2. CORE INFRASTRUCTURE
@@ -91,10 +97,11 @@ CREATE TABLE room (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     hostel_id UUID NOT NULL REFERENCES hostel(id) ON DELETE RESTRICT,
     room_number VARCHAR(50) NOT NULL,
-    room_type VARCHAR(50),
-    max_capacity INT NOT NULL CHECK (max_capacity IN (1,2,3,4)),
+    block VARCHAR(50) DEFAULT NULL,
+    room_type room_type_enum DEFAULT 'Student',
+    max_capacity INT NOT NULL CHECK (max_capacity IN (1,2,3,4,5,6)),
     current_occupancy INT DEFAULT 0 CHECK (current_occupancy >= 0 AND current_occupancy <= max_capacity),
-    UNIQUE(hostel_id, room_number)
+    UNIQUE(hostel_id, block, room_number)
 );
 
 CREATE TABLE batch (
@@ -116,19 +123,28 @@ CREATE TABLE batch (
 CREATE TABLE student (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    father_name VARCHAR(255),
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     hostel VARCHAR(255) NOT NULL,
     hostel_id UUID NOT NULL REFERENCES hostel(id) ON DELETE CASCADE,
     roll_no VARCHAR(100) UNIQUE,
     phone VARCHAR(255),
+    parent_number VARCHAR(20),
+    category VARCHAR(50),
+    blood_group VARCHAR(10),
+    state VARCHAR(100),
+    address TEXT,
+    pincode VARCHAR(20),
     department VARCHAR(255) NOT NULL,
     cgpa NUMERIC(4,2),
-    individual_rank INTEGER UNIQUE,
+    joining_year INTEGER,
+    individual_rank INTEGER,
     is_allotted BOOLEAN DEFAULT FALSE,
     physical_room_id UUID REFERENCES room(id) ON DELETE SET NULL,
     allocated_room_id UUID REFERENCES room(id) ON DELETE SET NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (joining_year, individual_rank)
 );
 
 CREATE TABLE housing_group (
@@ -517,7 +533,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_update_room_occupancy
-AFTER INSERT OR UPDATE OF room_id OR UPDATE OF assignment_status OR DELETE
+AFTER INSERT OR UPDATE OF room_id, assignment_status OR DELETE
 ON room_assignment
 FOR EACH ROW
 EXECUTE FUNCTION recalculate_room_occupancy();

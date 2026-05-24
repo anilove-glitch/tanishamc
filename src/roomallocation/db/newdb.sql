@@ -138,11 +138,13 @@ CREATE TABLE student (
     pincode VARCHAR(20),
     department VARCHAR(255) NOT NULL,
     cgpa NUMERIC(4,2),
-    individual_rank INTEGER UNIQUE,
+    joining_year INTEGER,
+    individual_rank INTEGER,
     is_allotted BOOLEAN DEFAULT FALSE,
     physical_room_id UUID REFERENCES room(id) ON DELETE SET NULL,
     allocated_room_id UUID REFERENCES room(id) ON DELETE SET NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (joining_year, individual_rank)
 );
 
 CREATE TABLE housing_group (

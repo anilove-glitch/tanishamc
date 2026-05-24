@@ -49,15 +49,6 @@ export const executeBulkAllocation = async (allocations, hostelId) => {
                     [studentId, roomId]
                 );
                 
-                // Immediately activate the assignment (since first-year allocations are final/instant)
-                // The stored procedure sets it to 'UPCOMING' by default, we need it to be 'ACTIVE'
-                await client.query(
-                    `UPDATE room_assignment 
-                     SET assignment_status = 'ACTIVE', valid_from = CURRENT_DATE 
-                     WHERE student_id = $1 AND room_id = $2 AND assignment_status = 'UPCOMING'`,
-                    [studentId, roomId]
-                );
-                
                 successfulStudents++;
             }
             successfulRooms++;
@@ -96,7 +87,7 @@ export const rollbackAllocations = async (roomIds, hostelId) => {
             
             // Delete assignments (DB triggers will auto-sync student fields and room occupancy)
             await client.query(
-                `DELETE FROM room_assignment WHERE room_id = $1 AND assignment_status = 'ACTIVE'`, 
+                `DELETE FROM room_assignment WHERE room_id = $1 AND assignment_status = 'UPCOMING'`, 
                 [roomId]
             );
         }
@@ -110,6 +101,66 @@ export const rollbackAllocations = async (roomIds, hostelId) => {
     } catch (error) {
         await client.query('ROLLBACK');
         throw new Error(`Rollback transaction failed: ${error.message}`);
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Manually assign a single student to a specific room.
+ * Uses the same DB procedures and triggers as bulk allocator.
+ */
+export const executeManualAllocation = async (studentId, roomId, hostelId) => {
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN');
+
+        // Check if room has space
+        const roomCheck = await client.query(
+            `SELECT current_occupancy, max_capacity FROM room WHERE id = $1 FOR UPDATE`, 
+            [roomId]
+        );
+
+        if (roomCheck.rowCount === 0) {
+            throw new Error(`Room ${roomId} not found`);
+        }
+
+        const { current_occupancy, max_capacity } = roomCheck.rows[0];
+
+        if (current_occupancy >= max_capacity) {
+            throw new Error(`Room is full (occupancy: ${current_occupancy}/${max_capacity})`);
+        }
+
+        // Check if student is already assigned
+        const studentCheck = await client.query(
+            `SELECT is_allotted FROM student WHERE id = $1 FOR UPDATE`,
+            [studentId]
+        );
+
+        if (studentCheck.rowCount === 0) {
+            throw new Error(`Student ${studentId} not found`);
+        }
+
+        if (studentCheck.rows[0].is_allotted) {
+            throw new Error(`Student ${studentId} is already allotted`);
+        }
+
+        // Assign student
+        await client.query(
+            `SELECT assign_student_to_room($1, $2, 'ADMIN')`,
+            [studentId, roomId]
+        );
+
+        await client.query('COMMIT');
+        
+        emit(WS_EVENTS.ROOM_MAP_UPDATED, { hostelId, timestamp: new Date() }, hostelId);
+        
+        return { success: true };
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw new Error(`Manual allocation failed: ${error.message}`);
     } finally {
         client.release();
     }

@@ -9,17 +9,20 @@
   "scripts": {
     "dev": "nodemon index.js",
     "seed": "node src/roomallocation/db/seed.js",
-    "test:api": "node src/roomallocation/db/test-api.js"
+    "test:api": "node src/roomallocation/db/test-api.js",
+    "check:students": "node check_students.js"
   },
   "dependencies": {
+    "@faker-js/faker": "^10.4.0",
     "axios": "^1.16.1",
+    "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "nodemon": "^3.1.14",
-    "pg": "^8.20.0",
+    "pg": "^8.21.0",
     "pusher": "^5.3.3",
     "pusher-js": "^8.4.0",
     "zod": "^4.4.3"

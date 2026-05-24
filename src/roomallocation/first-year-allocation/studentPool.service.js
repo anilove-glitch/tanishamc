@@ -27,7 +27,7 @@ export const getUnassignedStudentPoolStats = async (hostelId) => {
     const query = `
         SELECT 
             CASE 
-                WHEN state = $1 THEN 'HOME_STATE'
+                WHEN state = $1 OR state = 'HOME_STATE' THEN 'HOME_STATE'
                 ELSE 'OTHER_STATE'
             END as state_category,
             department as branch,
@@ -86,7 +86,7 @@ export const getUnassignedFirstYearStudents = async (hostelId) => {
             roll_no,
             department as branch,
             CASE 
-                WHEN state = $1 THEN 'HOME_STATE'
+                WHEN state = $1 OR state = 'HOME_STATE' THEN 'HOME_STATE'
                 ELSE 'OTHER_STATE'
             END as state_category
         FROM student

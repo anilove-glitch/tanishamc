@@ -13,6 +13,12 @@ router.get('/analytics/:hostelId', WardenController.getAnalytics);
 // Execute the allocation constraint engine
 router.post('/allocate', WardenController.allocate);
 
+// Get unassigned student profiles for manual allocation
+router.get('/unallocated/:hostelId', WardenController.getUnallocated);
+
+// Execute manual assignment
+router.post('/manual-assign', WardenController.manualAssign);
+
 // Emergency rollback
 router.post('/rollback', WardenController.rollback);
 
