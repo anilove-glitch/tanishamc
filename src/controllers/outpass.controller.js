@@ -293,7 +293,184 @@ const getMyOutpasses = asyncHandler(async (req, res) => {
         )
     );
 });
+/*
+=================================================
+BULK OUTPASS ACTION
+=================================================
+*/
 
+const bulkOutpassAction =
+asyncHandler(async (req, res) => {
+
+    const {
+        outpass_ids,
+        action
+    } = req.body;
+
+    /* ================= VALIDATION ================= */
+
+    if (
+        !Array.isArray(outpass_ids) ||
+        outpass_ids.length === 0
+    ) {
+
+        throw new ApiError(
+            400,
+            "outpass_ids array required"
+        );
+    }
+
+    if (
+        action !== "approve" &&
+        action !== "reject"
+    ) {
+
+        throw new ApiError(
+            400,
+            "Invalid action"
+        );
+    }
+
+    /* ================= ATTENDANT HOSTEL ================= */
+
+    const hostelQuery = `
+        SELECT hostel_id
+        FROM attendent
+        WHERE id = $1
+        LIMIT 1;
+    `;
+
+    const hostelResult =
+        await pool.query(
+            hostelQuery,
+            [req.user.id]
+        );
+
+    if (
+        hostelResult.rows.length === 0
+    ) {
+
+        throw new ApiError(
+            404,
+            "Attendent not found"
+        );
+    }
+
+    const hostelId =
+        hostelResult.rows[0]
+            .hostel_id;
+
+    /* ================= VERIFY OUTPASSES ================= */
+
+    const verifyQuery = `
+        SELECT
+            o.id
+
+        FROM outpass o
+
+        JOIN student s
+        ON o.student_id = s.id
+
+        WHERE
+            o.id = ANY($1)
+            AND s.hostel_id = $2
+            AND o.outp_status = 'Pending'
+            AND o.is_active = true;
+    `;
+
+    const verifyResult =
+        await pool.query(
+            verifyQuery,
+            [
+                outpass_ids,
+                hostelId
+            ]
+        );
+
+    const validIds =
+        verifyResult.rows.map(
+            (row) => row.id
+        );
+
+    if (validIds.length === 0) {
+
+        throw new ApiError(
+            400,
+            "No valid pending outpasses found"
+        );
+    }
+
+    /* ================= ACTION CONFIG ================= */
+
+    let status =
+        "Approved";
+
+    let active =
+        true;
+
+    if (action === "reject") {
+
+        status =
+            "Rejected";
+
+        active =
+            false;
+    }
+
+    /* ================= UPDATE ================= */
+
+    const updateQuery = `
+        UPDATE outpass
+
+        SET
+            outp_status = $1,
+
+            is_active = $2,
+
+            approved_by = $3,
+
+            approved_at =
+                CURRENT_TIMESTAMP,
+
+            updated_at =
+                CURRENT_TIMESTAMP
+
+        WHERE id = ANY($4)
+
+        RETURNING *;
+    `;
+
+    const updateResult =
+        await pool.query(
+            updateQuery,
+            [
+                status,
+                active,
+                req.user.id,
+                validIds
+            ]
+        );
+
+    /* ================= RESPONSE ================= */
+
+    return res.status(200).json(
+
+        new ApiResponse(
+            200,
+            {
+                action,
+
+                affected_count:
+                    updateResult.rows.length,
+
+                outpasses:
+                    updateResult.rows,
+            },
+
+            `Bulk ${action} successful`
+        )
+    );
+});
 /*
 =================================================
 GET ACTIVE OUTPASS
@@ -1093,6 +1270,7 @@ export {
     getActiveOutpass,
     getOutpassById,
     cancelOutpass,
+    bulkOutpassAction,
     getPendingOutpasses,
     approveOutpass,
     rejectOutpass,

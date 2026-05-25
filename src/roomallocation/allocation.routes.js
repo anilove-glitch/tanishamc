@@ -65,7 +65,7 @@ router.post("/submit-preferences", async (req, res) => {
 // =====================================================
 router.get("/rooms/:hostelId", async (req, res) => {
     try {
-        const result = await allocationService.getLiveRoomMap(req.params.hostelId);
+        const result = await allocationService.getLiveRoomMap(req.params.hostelId, req.query.studentId);
         res.status(200).json({ success: true, rooms: result });
     } catch (error) {
         res.status(error.statusCode || 500).json({ success: false, message: error.message });
@@ -140,9 +140,9 @@ router.post("/dev/reset-phase", async (req, res) => {
         const { emit, WS_EVENTS } = await import("./websocket/emitter.js");
         
         await db.query('BEGIN');
-        await db.query(`DELETE FROM room_assignment`);
-        await db.query(`DELETE FROM allocation_submission`);
-        await db.query(`UPDATE housing_group SET status = 'FORMING', batch_id = NULL`);
+        await db.query(`DELETE FROM room_assignment WHERE room_id IN (SELECT id FROM room WHERE hostel_id = $1)`, [hostelId]);
+        await db.query(`DELETE FROM allocation_submission WHERE batch_id IN (SELECT id FROM batch WHERE hostel_id = $1)`, [hostelId]);
+        await db.query(`UPDATE housing_group SET status = 'FORMING', batch_id = NULL WHERE id IN (SELECT group_id FROM student WHERE hostel_id = $1)`, [hostelId]);
         await db.query(`DELETE FROM batch WHERE hostel_id = $1`, [hostelId]);
         await db.query(`UPDATE hostel SET current_phase = 'LOBBY' WHERE id = $1`, [hostelId]);
         await db.query('COMMIT');
