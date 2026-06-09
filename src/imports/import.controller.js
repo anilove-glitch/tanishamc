@@ -14,13 +14,13 @@ export const uploadStudentCSV = async (req, res, next) => {
 
 export const confirmStudentCSV = async (req, res, next) => {
     try {
-        const { fileId, mappings } = req.body;
+        const { fileId, mappings, hostelId } = req.body;
         
-        if (!fileId || !mappings) {
-            return res.status(400).json({ success: false, message: "fileId and mappings are required." });
+        if (!fileId || !mappings || !hostelId) {
+            return res.status(400).json({ success: false, message: "fileId, mappings, and hostelId are required." });
         }
 
-        const result = await importService.executeImport(fileId, mappings);
+        const result = await importService.executeImport(fileId, mappings, hostelId);
         res.json(result);
     } catch (err) {
         next(err);

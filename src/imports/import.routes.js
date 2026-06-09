@@ -21,15 +21,12 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = [
-    'text/csv',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  ];
-  if (allowedMimeTypes.includes(file.mimetype)) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExts = ['.csv', '.xls', '.xlsx'];
+  if (allowedExts.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Unsupported file format. Please upload CSV, XLS, or XLSX.'));
+    cb(new Error('Unsupported file format. Please upload a .csv, .xls, or .xlsx file.'));
   }
 };
 

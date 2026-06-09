@@ -32,7 +32,7 @@ export const previewImport = async (filePath, filename) => {
  * Step 2: Execute Import
  * Transforms CSV rows according to mappings, validates, and bulk inserts.
  */
-export const executeImport = async (fileId, mappings) => {
+export const executeImport = async (fileId, mappings, globalHostelId) => {
     // Determine path based on Multer's default relative path structure
     const filePath = path.join(process.cwd(), 'uploads', 'temp', fileId);
     
@@ -54,6 +54,8 @@ export const executeImport = async (fileId, mappings) => {
                 student[dbField] = row[csvColumn] || null;
             }
         }
+        // Force the hostel_id to the one selected by the Warden
+        student.hostel_id = globalHostelId;
         return student;
     });
 
