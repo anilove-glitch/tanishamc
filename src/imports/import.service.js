@@ -35,6 +35,13 @@ export const previewImport = async (filePath, filename) => {
 export const executeImport = async (fileId, mappings, globalHostelId) => {
     // Determine path based on Multer's default relative path structure
     const filePath = path.join(process.cwd(), 'uploads', 'temp', fileId);
+
+    // Fetch the hostel name from the DB
+    const hostelResult = await pool.query('SELECT name FROM hostel WHERE id = $1', [globalHostelId]);
+    if (hostelResult.rows.length === 0) {
+        throw new Error("Target hostel not found.");
+    }
+    const hostelName = hostelResult.rows[0].name;
     
     let csvResult;
     try {
@@ -54,8 +61,9 @@ export const executeImport = async (fileId, mappings, globalHostelId) => {
                 student[dbField] = row[csvColumn] || null;
             }
         }
-        // Force the hostel_id to the one selected by the Warden
+        // Force the hostel_id and hostel name to the one selected by the Warden
         student.hostel_id = globalHostelId;
+        student.hostel = hostelName;
         return student;
     });
 
