@@ -36,12 +36,11 @@ export const getUnassignedStudentPoolStats = async (hostelId) => {
         WHERE 
             hostel_id = $2 
             AND is_allotted = FALSE 
-            AND roll_no LIKE $3
         GROUP BY state_category, department
         ORDER BY state_category, branch
     `;
 
-    const result = await pool.query(query, [HOME_STATE_NAME, hostelId, `${yearPrefix}%`]);
+    const result = await pool.query(query, [HOME_STATE_NAME, hostelId]);
     return result.rows.map(row => ({
         state: row.state_category,
         branch: row.branch,
@@ -93,10 +92,9 @@ export const getUnassignedFirstYearStudents = async (hostelId) => {
         WHERE 
             hostel_id = $2 
             AND is_allotted = FALSE 
-            AND roll_no LIKE $3
         ORDER BY individual_rank ASC
     `;
 
-    const result = await pool.query(query, [HOME_STATE_NAME, hostelId, `${yearPrefix}%`]);
+    const result = await pool.query(query, [HOME_STATE_NAME, hostelId]);
     return result.rows;
 };
