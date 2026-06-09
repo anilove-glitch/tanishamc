@@ -1,12 +1,39 @@
 import express from 'express';
 import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 import { uploadStudentCSV, confirmStudentCSV } from './import.controller.js';
 
 const router = express.Router();
-// IMPORTANT: We need to ensure the uploads/temp directory exists, but multer usually handles this if configured or we can create it.
-// Let's rely on backend setup, or we'll make sure it exists.
-const upload = multer({ dest: 'uploads/temp/' }); 
+
+const tempDir = 'uploads/temp/';
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: tempDir,
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Unsupported file format. Please upload CSV, XLS, or XLSX.'));
+  }
+};
+
+const upload = multer({ storage, fileFilter });
 
 router.post('/students/upload', upload.single('file'), uploadStudentCSV);
 router.post('/students/confirm', confirmStudentCSV);

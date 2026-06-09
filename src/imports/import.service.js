@@ -1,4 +1,4 @@
-import { parseCSV } from './csvParser.js';
+import { parseFile } from './fileParser.js';
 import { detectMappings, SUPPORTED_FIELDS } from './fieldMapper.js';
 import { validateRows } from './validators.js';
 import { insertStudents } from './bulkInsert.js';
@@ -10,10 +10,10 @@ import path from 'path';
  * Parses headers, auto-maps them, and returns a preview response.
  */
 export const previewImport = async (filePath, filename) => {
-    const { headers, rows } = await parseCSV(filePath);
+    const { headers, rows } = await parseFile(filePath, filename);
     
     if (!headers || headers.length === 0) {
-        throw new Error("CSV file does not contain headers.");
+        throw new Error("File does not contain headers.");
     }
     
     const { detectedMappings, unmappedFields, unmappedColumns } = detectMappings(headers);
@@ -38,7 +38,8 @@ export const executeImport = async (fileId, mappings) => {
     
     let csvResult;
     try {
-        csvResult = await parseCSV(filePath);
+        // fileId contains the extension now, so parseFile can detect it
+        csvResult = await parseFile(filePath, fileId);
     } catch (err) {
         throw new Error("Temporary file not found or could not be parsed. Please re-upload.");
     }
