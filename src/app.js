@@ -13,6 +13,8 @@ import allocationRoutes from "./roomallocation/allocation.routes.js";
 import adminRoutes from "./roomallocation/admin/admin.routes.js";
 import wardenRoutes from "./roomallocation/first-year-allocation/warden.routes.js";
 
+import importRoutes from "./imports/import.routes.js";
+
 import outpassRoutes from "./routes/outpass.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import complaintRoutes from '../working-routes/complaint.js';
@@ -147,6 +149,9 @@ app.use("/api/preferences", preferenceRoutes);
 app.use("/api/allocation", allocationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/warden", wardenRoutes);
+
+// Import Routes
+app.use("/api/import", importRoutes);
 
 /*
 =================================================

@@ -90,6 +90,8 @@ CREATE TABLE hostel (
     total_capacity INT DEFAULT 0,
     current_phase system_phase_enum DEFAULT 'ADMIN_MODE',
     is_paused BOOLEAN DEFAULT FALSE,
+    allocation_date TIMESTAMP WITH TIME ZONE,
+    lobby_opens_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

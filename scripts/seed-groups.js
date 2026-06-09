@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // The dataset with block allocations based on your constraints
 const hostelsData = [
@@ -78,7 +78,7 @@ const hostelsData = [
             { block: 'A', prefix: 'P-S', start: 1, end: 54, capacity: 1, roomType: 'Student' },
             { block: 'B', prefix: 'P-T', start: 1, end: 36, capacity: 3, roomType: 'Student' },
             { block: 'Admin', prefix: 'P-G', start: 1, end: 2, capacity: 2, roomType: 'Guest' },
-            { block: 'Admin', prefix: 'P-VIS', start: 1, end: 1, capacity: 4, roomType: 'Visitor' }
+            { block: 'Admin', prefix: 'P-VIS', start: 1, end: 1, capacity: 4, roomType: 'Guest' }
         ]
     },
     {
@@ -105,7 +105,7 @@ const hostelsData = [
 ];
 
 async function seedHostels() {
-    const { default: pool } = await import('./src/db/pool.js');
+    const { default: pool } = await import('../src/db/pool.js');
     const client = await pool.connect();
     console.log('🔗 Connected to database. Starting hostel and room population...');
 

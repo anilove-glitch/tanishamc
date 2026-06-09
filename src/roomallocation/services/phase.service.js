@@ -5,6 +5,13 @@
  *
  * Phases (system_phase_enum):
  *   LOBBY        → students form groups, no submissions
+/**
+ * phase.service.js
+ * Single source of truth for all hostel phase orchestration.
+ * Move updateHostelPhase() from room.service.js lives here.
+ *
+ * Phases (system_phase_enum):
+ *   LOBBY        → students form groups, no submissions
  *   SOFT_LOCK    → groups lock, no new members
  *   LIVE_BATCHES → active batch allocation rounds
  *   FINAL_SWEEP  → leftover assignment pass
@@ -15,6 +22,7 @@ import pool from '../../db/pool.js';
 import { SYSTEM_PHASES } from '../constants/phases.js';
 import { assignGroupsToBatches } from './softLock.service.js';
 import ApiError from '../../utils/apiError.js';
+import { getPhase, setPhase, invalidatePhase } from '../../cache/phaseCache.js';
 
 // Valid phase transitions
 const VALID_TRANSITIONS = {
@@ -30,14 +38,30 @@ const VALID_TRANSITIONS = {
 // ─────────────────────────────────────────────────────────
 
 /**
- * Get current phase + pause state for a hostel
+ * Get current phase + pause state for a hostel.
+ *
+ * Cache pattern:
+ *   1. Check Redis  →  hit: return immediately
+ *   2. Miss / error →  query Postgres, populate cache (5 min TTL), return row
  */
 export const getCurrentPhase = async (hostelId) => {
+    // 1. Redis read
+    const cached = await getPhase(hostelId);
+    if (cached !== null) {
+        console.log(`[cache] HIT  phase:${hostelId}`);
+        return cached;
+    }
+
+    // 2. Postgres fallback
+    console.log(`[cache] MISS phase:${hostelId} — querying Postgres`);
     const result = await pool.query(
         `SELECT id, name, current_phase, is_paused FROM hostel WHERE id = $1`,
         [hostelId]
     );
     if (result.rows.length === 0) throw new ApiError(404, 'Hostel not found');
+
+    // 3. Populate cache
+    await setPhase(hostelId, result.rows[0]);
     return result.rows[0];
 };
 
@@ -89,6 +113,9 @@ export const setCurrentPhase = async (hostelId, newPhase) => {
         }
     }
 
+    // Invalidate phase cache so next read reflects the new phase
+    await invalidatePhase(hostelId);
+
     return result.rows[0];
 };
 
@@ -102,6 +129,7 @@ export const pauseAllocation = async (hostelId) => {
         [hostelId]
     );
     if (result.rows.length === 0) throw new ApiError(404, 'Hostel not found');
+    await invalidatePhase(hostelId);
     return result.rows[0];
 };
 
@@ -114,6 +142,7 @@ export const resumeAllocation = async (hostelId) => {
         [hostelId]
     );
     if (result.rows.length === 0) throw new ApiError(404, 'Hostel not found');
+    await invalidatePhase(hostelId);
     return result.rows[0];
 };
 

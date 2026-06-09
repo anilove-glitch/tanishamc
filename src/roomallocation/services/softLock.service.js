@@ -37,13 +37,14 @@ export async function assignGroupsToBatches(hostelId) {
     try {
         await client.query('BEGIN');
 
-        // 1. Fetch all FORMING groups with their leader's rank
+        // 1. Fetch all FORMING groups with their leader's rank for THIS HOSTEL ONLY
         const groupsRes = await client.query(
             `SELECT hg.id, s.individual_rank AS leader_rank
              FROM housing_group hg
              JOIN student s ON s.id = hg.primary_applicant_id
-             WHERE hg.status = 'FORMING'
-             ORDER BY s.individual_rank ASC NULLS LAST`
+             WHERE hg.status = 'FORMING' AND s.hostel_id = $1
+             ORDER BY s.individual_rank ASC NULLS LAST`,
+             [hostelId]
         );
 
         const groups = groupsRes.rows;
@@ -106,10 +107,11 @@ export async function assignGroupsToBatches(hostelId) {
             await client.query(
                 `UPDATE housing_group
                  SET status   = 'SOFT_LOCKED',
-                     batch_id = $1
+                     batch_id = $1,
+                     group_rank = $3
                  WHERE id = $2
                    AND status = 'FORMING'`,
-                [batch.id, groups[i].id]
+                [batch.id, groups[i].id, i + 1]
             );
 
             assigned++;

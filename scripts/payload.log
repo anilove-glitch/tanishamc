@@ -1,0 +1,28 @@
+{
+  "hostelId": "bea2e925-2179-49ea-a541-d7c663da2066",
+  "targetRoomIds": [
+    "d49c4c9d-6029-4d39-bf98-11aee30ccc8e",
+    "7db6c019-db48-44bb-8cc8-38eec7e32ea6"
+  ],
+  "layoutConfig": {
+    "capacity": 3,
+    "branchDiversity": "ALLOW_SAME",
+    "nodes": [
+      {
+        "id": "bed_0",
+        "state": "HOME_STATE",
+        "branch": "ANY"
+      },
+      {
+        "id": "bed_1",
+        "state": "OTHER_STATE",
+        "branch": "ANY"
+      },
+      {
+        "id": "bed_2",
+        "state": "OTHER_STATE",
+        "branch": "ANY"
+      }
+    ]
+  }
+}
