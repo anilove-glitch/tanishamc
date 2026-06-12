@@ -32,6 +32,7 @@ CREATE TABLE complaint (
     id SERIAL PRIMARY KEY,
     student_id INT NOT NULL REFERENCES student(id),
     title VARCHAR(255) NOT NULL DEFAULT 'Untitled',
+    type  VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
     hostel VARCHAR(255) NOT NULL,
     status VARCHAR(255) NOT NULL DEFAULT 'pending',

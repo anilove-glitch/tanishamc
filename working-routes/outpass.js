@@ -153,9 +153,10 @@ router.get('/by-hostel', auth, async (req, res) => {
 
     try {
         const outpasses = await pool.query(
-            `SELECT op.*, s.name as student_name, s.room as student_room, s.phone as student_phone 
+            `SELECT op.*, s.name as student_name, r.room_number as student_room, s.phone as student_phone 
              FROM outpass op 
              JOIN student s ON op.student_id = s.id 
+             LEFT JOIN room r ON s.physical_room_id = r.id
              WHERE op.hostel = $1 AND op.status = $2 
              ORDER BY op.date_created DESC`,
             [hostel, 'pending']
@@ -178,9 +179,10 @@ router.get('/by-hostel', auth, async (req, res) => {
 router.get('/all-approved', auth, async (req, res) => {
     try {
         const outpasses = await pool.query(
-            `SELECT op.*, s.name as student_name, s.room as student_room, s.phone as student_phone, s.department 
+            `SELECT op.*, s.name as student_name, r.room_number as student_room, s.phone as student_phone, s.department 
              FROM outpass op 
              JOIN student s ON op.student_id = s.id 
+             LEFT JOIN room r ON s.physical_room_id = r.id
              WHERE op.status = $1 AND op.approved_by IS NOT NULL
              ORDER BY op.hostel, op.date_created DESC`,
             ['approved']
@@ -207,9 +209,10 @@ router.get('/approved-by-hostel', auth, async (req, res) => {
 
     try {
         const outpasses = await pool.query(
-            `SELECT op.*, s.name as student_name, s.room as student_room, s.phone as student_phone 
+            `SELECT op.*, s.name as student_name, r.room_number as student_room, s.phone as student_phone 
              FROM outpass op 
              JOIN student s ON op.student_id = s.id 
+             LEFT JOIN room r ON s.physical_room_id = r.id
              WHERE op.hostel = $1 AND op.status = $2 AND op.approved_by IS NOT NULL
              ORDER BY op.date_created DESC`,
             [hostel, 'approved']
@@ -278,11 +281,12 @@ router.get('/monitor', async (req, res) => {
         const outpasses = await pool.query(
             `SELECT op.*, 
                     s.name as student_name, 
-                    s.room as student_room, 
+                    r.room_number as student_room, 
                     s.phone as student_phone, 
                     s.department 
              FROM outpass op 
              JOIN student s ON op.student_id = s.id 
+             LEFT JOIN room r ON s.physical_room_id = r.id
              ORDER BY op.date_created DESC`
         );
 

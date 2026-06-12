@@ -13,9 +13,10 @@ router.get('/by-hostel', auth, async (req, res) => {
 
     try {
         const complaints = await pool.query(
-            `SELECT c.*, s.name as student_name, s.room as student_room, s.phone as student_phone 
+            `SELECT c.*, s.name as student_name, r.room_number as student_room, s.phone as student_phone 
              FROM complaint c 
              JOIN student s ON c.student_id = s.id 
+             LEFT JOIN room r ON s.physical_room_id = r.id
              WHERE c.hostel = $1 AND c.status = $2 
              ORDER BY c.date_created DESC`,
             [hostel, 'pending']
@@ -34,7 +35,7 @@ router.get('/by-hostel', auth, async (req, res) => {
 });
 
 router.put('/update-complaint', auth, async (req, res) => {
-    const { complaint_id, status } = req.body;
+    const { complaint_id, status, resolved_description } = req.body;
     const { id: attendant_id } = req.user;
 
     if (!complaint_id || !status) {
@@ -43,10 +44,10 @@ router.put('/update-complaint', auth, async (req, res) => {
 
     try {
         const result = await pool.query(
-            `UPDATE complaint SET status = $1, resolved_by = $2, resolved_at = NOW() 
-             WHERE id = $3 AND status != 'resolved'
+            `UPDATE complaint SET status = $1, resolved_by = $2, resolved_at = NOW(), resolved_description = $3 
+             WHERE id = $4 AND status != 'resolved'
              RETURNING *`,
-            [status, attendant_id, complaint_id]
+            [status, attendant_id, resolved_description || null, complaint_id]
         );
 
         if (result.rows.length === 0) {
@@ -66,17 +67,17 @@ router.put('/update-complaint', auth, async (req, res) => {
 });
 
 router.post('/postcomplaint', auth, async (req, res) => {
-  const { title, description, hostel } = req.body;
+  const { title, type, description, hostel } = req.body;
   const { id: student_id } = req.user; // Get securely from token
 
-  if (!title || !description || !hostel) {
+  if (!title || !type || !description || !hostel) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
 
   try {
     const result = await pool.query(
-      'INSERT INTO complaint (student_id, title, description, hostel) VALUES ($1, $2, $3, $4) RETURNING *', 
-      [student_id, title, description, hostel]
+      'INSERT INTO complaint (student_id, title, type, description, hostel) VALUES ($1, $2, $3, $4, $5) RETURNING *', 
+      [student_id, title, type, description, hostel]
     );
     
     return res.status(200).json({ message: 'Complaint submitted successfully', complaint: result.rows[0] });
