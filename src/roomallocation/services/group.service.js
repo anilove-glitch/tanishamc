@@ -1,5 +1,9 @@
 import pool from '../../db/pool.js';
 import ApiError from '../../utils/apiError.js';
+import {
+    getGroup, setGroup, invalidateGroup,
+    getMembers, setMembers, invalidateMembers,
+} from '../../cache/groupCache.js';
 
 async function ensureShatterHistoryTable(client) {
     await client.query(`
@@ -118,6 +122,11 @@ export const createGroup = async (primaryApplicantId) => {
         }
 
         await client.query('COMMIT');
+
+        // Invalidate any stale group cache for the new group
+        await invalidateGroup(group.id);
+        await invalidateMembers(group.id);
+
         return group;
     } catch (error) {
         await client.query('ROLLBACK');
@@ -133,6 +142,17 @@ export const createGroup = async (primaryApplicantId) => {
  */
 export const getGroupDetails = async (groupId) => {
     try {
+        // Redis read-through for group
+        const cachedGroup = await getGroup(groupId);
+        const cachedMembers = await getMembers(groupId);
+
+        if (cachedGroup !== null && cachedMembers !== null) {
+            console.log(`[cache] HIT  group:${groupId}`);
+            return { ...cachedGroup, members: cachedMembers };
+        }
+
+        // Postgres fallback
+        console.log(`[cache] MISS group:${groupId} — querying Postgres`);
         const groupRes = await pool.query(`SELECT * FROM v_housing_group_with_size WHERE id = $1`, [groupId]);
         if (groupRes.rows.length === 0) throw new ApiError(404, 'Group not found');
 
@@ -141,6 +161,10 @@ export const getGroupDetails = async (groupId) => {
              FROM student WHERE group_id = $1`,
             [groupId]
         );
+
+        // Populate cache
+        await setGroup(groupId, groupRes.rows[0]);
+        await setMembers(groupId, membersRes.rows);
 
         return {
             ...groupRes.rows[0],
@@ -260,6 +284,13 @@ export const respondToGroupRequest = async (requestId, status) => {
         }
 
         await client.query('COMMIT');
+
+        // Invalidate group + members cache after membership change
+        if (status === 'ACCEPTED') {
+            await invalidateGroup(request.group_id);
+            await invalidateMembers(request.group_id);
+        }
+
         return updateRes.rows[0];
     } catch (error) {
         await client.query('ROLLBACK');
@@ -305,12 +336,19 @@ export const leaveGroup = async (studentId) => {
         }
 
         // 3. Perform the leave — triggers handle leader reassignment/group deletion
+        const groupIdForCache = student.group_id;
+
         await client.query(
             `UPDATE student SET group_id = NULL WHERE id = $1`,
             [studentId]
         );
 
         await client.query('COMMIT');
+
+        // Invalidate the group cache since membership changed
+        await invalidateGroup(groupIdForCache);
+        await invalidateMembers(groupIdForCache);
+
         return { success: true, message: 'Successfully left group' };
     } catch (error) {
         await client.query('ROLLBACK');
@@ -381,6 +419,17 @@ export const getAllGroups = async () => {
  */
 export const getGroupMembers = async (groupId) => {
     try {
+        // Redis read-through
+        const cachedGroup   = await getGroup(groupId);
+        const cachedMembers = await getMembers(groupId);
+
+        if (cachedGroup !== null && cachedMembers !== null) {
+            console.log(`[cache] HIT  groupmembers:${groupId}`);
+            return { group: cachedGroup, members: cachedMembers };
+        }
+
+        // Postgres fallback
+        console.log(`[cache] MISS groupmembers:${groupId} — querying Postgres`);
         const groupRes = await pool.query(
             `SELECT * FROM v_housing_group_with_size WHERE id = $1`,
             [groupId]
@@ -394,6 +443,10 @@ export const getGroupMembers = async (groupId) => {
              ORDER BY individual_rank ASC`,
             [groupId]
         );
+
+        // Populate cache
+        await setGroup(groupId, groupRes.rows[0]);
+        await setMembers(groupId, membersRes.rows);
 
         return {
             group: groupRes.rows[0],
@@ -443,6 +496,10 @@ export const transferLeadership = async (groupId, newLeaderId) => {
         );
 
         await client.query('COMMIT');
+
+        // Invalidate group cache since leader changed
+        await invalidateGroup(groupId);
+
         return updated.rows[0];
     } catch (error) {
         await client.query('ROLLBACK').catch(() => {});
@@ -487,6 +544,11 @@ export const kickMember = async (groupId, leaderId, memberId) => {
         );
 
         await client.query('COMMIT');
+
+        // Invalidate group + members cache
+        await invalidateGroup(groupId);
+        await invalidateMembers(groupId);
+
         return { success: true, message: 'Member kicked successfully' };
     } catch (error) {
         await client.query('ROLLBACK').catch(() => {});

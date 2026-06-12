@@ -292,18 +292,45 @@ class AllocationService {
     // 3. LIVE ROOM MAP
     // =====================================================
 
-    async getLiveRoomMap(hostelId) {
-        const roomsRes = await pool.query(`
-            SELECT id, 
-                   room_number, 
-                   max_capacity, 
-                   current_occupancy,
-                   (max_capacity - current_occupancy) as remaining_beds,
-                   (current_occupancy < max_capacity) as available
-            FROM room
-            WHERE hostel_id = $1
-            ORDER BY room_number ASC
-        `, [hostelId]);
+    async getLiveRoomMap(hostelId, studentId = null) {
+        let joiningYear = null;
+        if (studentId) {
+            const studentRes = await pool.query('SELECT joining_year FROM student WHERE id = $1', [studentId]);
+            if (studentRes.rowCount > 0) {
+                joiningYear = studentRes.rows[0].joining_year;
+            }
+        }
+
+        // Both Warden and Student views MUST use the true r.current_occupancy to prevent 
+        // assigning students to beds already occupied by ACTIVE seniors or other UPCOMING students.
+        // We can still provide cohort-specific counts if needed, but the primary occupancy must be true occupancy.
+        const query = joiningYear
+            ? `
+                SELECT r.id, 
+                       r.room_number, 
+                       r.max_capacity, 
+                       r.current_occupancy,
+                       (SELECT COUNT(*)::int FROM room_assignment ra JOIN student s ON s.id = ra.student_id WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING' AND s.joining_year = $2) as cohort_occupancy,
+                       (r.max_capacity - r.current_occupancy) as remaining_beds,
+                       (r.current_occupancy < r.max_capacity) as available
+                FROM room r
+                WHERE r.hostel_id = $1
+                ORDER BY r.room_number ASC
+            `
+            : `
+                SELECT r.id, 
+                       r.room_number, 
+                       r.max_capacity, 
+                       r.current_occupancy,
+                       (r.max_capacity - r.current_occupancy) as remaining_beds,
+                       (r.current_occupancy < r.max_capacity) as available
+                FROM room r
+                WHERE r.hostel_id = $1
+                ORDER BY r.room_number ASC
+            `;
+            
+        const params = joiningYear ? [hostelId, joiningYear] : [hostelId];
+        const roomsRes = await pool.query(query, params);
 
         return roomsRes.rows.map(room => ({
             id: room.id,
@@ -349,7 +376,7 @@ class AllocationService {
             FROM student s
             LEFT JOIN housing_group hg ON s.group_id = hg.id
             LEFT JOIN batch b ON hg.batch_id = b.id
-            LEFT JOIN hostel h ON b.hostel_id = h.id
+            LEFT JOIN hostel h ON s.hostel_id = h.id
             LEFT JOIN room r ON s.allocated_room_id = r.id
             WHERE s.id = $1
         `, [studentId]);
