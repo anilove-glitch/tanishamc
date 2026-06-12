@@ -13,7 +13,8 @@ import allocationRoutes from "./roomallocation/allocation.routes.js";
 import adminRoutes from "./roomallocation/admin/admin.routes.js";
 
 import outpassRoutes from "./routes/outpass.routes.js";
-import studentRoutes from "./routes/student.routes.js"
+import studentRoutes from "./routes/student.routes.js";
+import complaintRoutes from '../working-routes/complaint.js';
 import authRoutes from "../working-routes/auth.js";
 import complaintRoutesWorking from "../working-routes/complaint.js";
 import outpassRoutesWorking from "../working-routes/outpass.js";
