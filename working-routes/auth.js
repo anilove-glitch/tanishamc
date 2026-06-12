@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import pool from '../src/db/pool.js';
 import auth from '../src/middleware/middleware.js';
 import dotenv from 'dotenv';
@@ -13,6 +14,7 @@ const ROLE_TABLES = {
     student: 'student',
     attendant: 'attendent',
     guard: 'guard',
+    warden: 'admins',
 };
 
 // ======================================================
@@ -84,14 +86,22 @@ router.post('/login', async (req, res) => {
 
         const result = await pool.query(
             `SELECT * FROM ${tableName}
-             WHERE email = $1 AND password = $2
+             WHERE email = $1
              LIMIT 1`,
-            [email, password]
+            [email]
         );
 
         const user = result.rows[0];
 
         if (!user) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
+        }
+
+        const storedPassword = user.password_hash ?? user.password;
+        const passwordMatch = await bcrypt.compare(password, storedPassword);
+        if (!passwordMatch) {
             return res.status(401).json({
                 message: 'Invalid credentials'
             });
@@ -116,10 +126,13 @@ router.post('/login', async (req, res) => {
         });
 
     } catch (err) {
-        console.error(err);
+        console.error("Login error:", err);
 
         return res.status(500).json({
-            message: 'Internal server error'
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
         });
     }
 });
@@ -164,11 +177,13 @@ router.get('/me', auth, async (req, res) => {
         });
 
     } catch (err) {
-
-        console.error(err);
+        console.error("Error in /me:", err);
 
         return res.status(500).json({
-            message: 'Internal server error'
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
         });
     }
 });
@@ -203,25 +218,24 @@ router.post('/signup', async (req, res) => {
                 name,
                 email,
                 password,
-                room,
                 phone,
                 department,
                 rollno,
                 hostel
             } = data;
 
-            if (
-                !name ||
-                !email ||
-                !password ||
-                !room ||
-                !phone ||
-                !department ||
-                !rollno ||
-                !hostel
-            ) {
+            const missingFields = [];
+            if (!name) missingFields.push('name');
+            if (!email) missingFields.push('email');
+            if (!password) missingFields.push('password');
+            if (!phone) missingFields.push('phone');
+            if (!department) missingFields.push('department');
+            if (!rollno) missingFields.push('rollno');
+            if (!hostel) missingFields.push('hostel');
+
+            if (missingFields.length > 0) {
                 return res.status(400).json({
-                    message: 'Missing required fields for student'
+                    message: `Missing required fields for student: ${missingFields.join(', ')}`
                 });
             }
 
@@ -236,11 +250,12 @@ router.post('/signup', async (req, res) => {
 
             if (hostelResult.rows.length === 0) {
                 return res.status(404).json({
-                    message: 'Hostel not found'
+                    message: 'Hostel not found. Pick one of the available hostels.'
                 });
             }
 
             const hostelData = hostelResult.rows[0];
+            const hashedPassword = await bcrypt.hash(password, 10);
 
             result = await pool.query(
     `INSERT INTO student
@@ -250,20 +265,18 @@ router.post('/signup', async (req, res) => {
         password,
         hostel,
         hostel_id,
-        room,
         roll_no,
         phone,
         department
     )
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
     RETURNING *`,
     [
         name,
         email,
-        password,
+        hashedPassword,
         hostelData.name,
         hostelData.id,
-        room,
         rollno,
         phone,
         department
@@ -287,15 +300,16 @@ router.post('/signup', async (req, res) => {
                 phone
             } = data;
 
-            if (
-                !name ||
-                !email ||
-                !password ||
-                !phone ||
-                !hostel
-            ) {
+            const missingFields = [];
+            if (!name) missingFields.push('name');
+            if (!email) missingFields.push('email');
+            if (!password) missingFields.push('password');
+            if (!phone) missingFields.push('phone');
+            if (!hostel) missingFields.push('hostel');
+
+            if (missingFields.length > 0) {
                 return res.status(400).json({
-                    message: 'Missing required fields for attendant'
+                    message: `Missing required fields for attendant: ${missingFields.join(', ')}`
                 });
             }
 
@@ -316,6 +330,8 @@ router.post('/signup', async (req, res) => {
 
             const hostelData = hostelResult.rows[0];
 
+            const hashedPasswordAttendant = await bcrypt.hash(password, 10);
+
             result = await pool.query(
                 `INSERT INTO attendent
                 (
@@ -331,7 +347,7 @@ router.post('/signup', async (req, res) => {
                 [
                     name,
                     email,
-                    password,
+                    hashedPasswordAttendant,
                     hostelData.name,
                     hostelData.id,
                     phone
@@ -354,16 +370,19 @@ router.post('/signup', async (req, res) => {
                 phone
             } = data;
 
-            if (
-                !name ||
-                !email ||
-                !password ||
-                !phone
-            ) {
+            const missingFields = [];
+            if (!name) missingFields.push('name');
+            if (!email) missingFields.push('email');
+            if (!password) missingFields.push('password');
+            if (!phone) missingFields.push('phone');
+
+            if (missingFields.length > 0) {
                 return res.status(400).json({
-                    message: 'Missing required fields for guard'
+                    message: `Missing required fields for guard: ${missingFields.join(', ')}`
                 });
             }
+
+            const hashedPasswordGuard = await bcrypt.hash(password, 10);
 
             result = await pool.query(
                 `INSERT INTO guard
@@ -378,7 +397,7 @@ router.post('/signup', async (req, res) => {
                 [
                     name,
                     email,
-                    password,
+                    hashedPasswordGuard,
                     phone
                 ]
             );
@@ -403,9 +422,27 @@ router.post('/signup', async (req, res) => {
         const token = jwt.sign({ id: user.id, email: user.email, role: data.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
         return res.status(201).json({ message: 'User created successfully', user, token });
     } catch (err) {
+        console.error("Signup error:", err);
 
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        // Handle specific Postgres duplicate key constraint violations (e.g. email or roll number already exists)
+        if (err.code === '23505') {
+            let detailMessage = 'Email or roll number already exists.';
+            if (err.detail) {
+                detailMessage = err.detail;
+            }
+            return res.status(409).json({
+                message: 'Duplicate key violation: User already exists.',
+                detail: detailMessage,
+                code: err.code
+            });
+        }
+
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 

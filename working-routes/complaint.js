@@ -23,8 +23,13 @@ router.get('/by-hostel', auth, async (req, res) => {
 
         return res.status(200).json({ complaints: complaints.rows });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in by-hostel complaints:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -50,8 +55,13 @@ router.put('/update-complaint', auth, async (req, res) => {
 
         return res.status(200).json({ message: 'Complaint updated successfully', complaint: result.rows[0] });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in update-complaint:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 
@@ -71,8 +81,13 @@ router.post('/postcomplaint', auth, async (req, res) => {
     
     return res.status(200).json({ message: 'Complaint submitted successfully', complaint: result.rows[0] });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error("Error in postcomplaint:", err);
+    return res.status(500).json({
+        message: err.message || 'Internal server error',
+        error: err.toString(),
+        detail: err.detail,
+        code: err.code
+    });
   }
 });
 
@@ -86,8 +101,13 @@ router.get('/my-complaints', auth, async (req, res) => {
     );
     return res.status(200).json({ complaints: complaints.rows });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error("Error in my-complaints:", err);
+    return res.status(500).json({
+        message: err.message || 'Internal server error',
+        error: err.toString(),
+        detail: err.detail,
+        code: err.code
+    });
   }
 });
 
@@ -115,8 +135,13 @@ router.put('/upvote', auth, async (req, res) => {
 
         return res.status(200).json({ message: 'Upvoted successfully', complaint: result.rows[0] });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ message: 'Internal server error' });
+        console.error("Error in upvote complaint:", err);
+        return res.status(500).json({
+            message: err.message || 'Internal server error',
+            error: err.toString(),
+            detail: err.detail,
+            code: err.code
+        });
     }
 });
 

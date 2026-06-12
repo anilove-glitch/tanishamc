@@ -1,0 +1,13 @@
+export const PHASES = {
+
+    LOBBY: "LOBBY",
+
+    SOFT_LOCK: "SOFT_LOCK",
+
+    LIVE_BATCHES: "LIVE_BATCHES",
+
+    FINAL_SWEEP: "FINAL_SWEEP",
+
+    ADMIN_MODE: "ADMIN_MODE"
+
+};
