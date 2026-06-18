@@ -197,37 +197,14 @@ router.get(
     }
 
     try {
-
-      const complaints =
-        await pool.query(
-
-          `SELECT
-              c.*,
-
-              s.name AS student_name,
-
-              s.roll_no AS student_roll_no,
-
-              s.phone AS student_phone,
-
-              s.department AS student_department
-
-           FROM complaint c
-
-           JOIN student s
-           ON c.student_id = s.id
-
-           WHERE c.hostel = $1
-           AND c.status = $2
-
-           ORDER BY
-  c.upvotes DESC,
-  c.date_created DESC`,
-
-          [
-            hostel,
-            'pending'
-          ]
+        const complaints = await pool.query(
+            `SELECT c.*, s.name as student_name, r.room_number as student_room, s.phone as student_phone 
+             FROM complaint c 
+             JOIN student s ON c.student_id = s.id 
+             LEFT JOIN room r ON s.physical_room_id = r.id
+             WHERE c.hostel = $1 AND c.status = $2 
+             ORDER BY c.date_created DESC`,
+            [hostel, 'pending']
         );
 
       return res.status(200).json({
@@ -267,19 +244,9 @@ router.get(
 UPDATE COMPLAINT
 ================================================= */
 
-router.put(
-  '/update-complaint',
-  auth,
-  async (req, res) => {
-
-    const {
-      complaint_id,
-      status
-    } = req.body;
-
-    const {
-      id: attendant_id
-    } = req.user;
+router.put('/update-complaint', auth, async (req, res) => {
+    const { complaint_id, status, resolved_description } = req.body;
+    const { id: attendant_id } = req.user;
 
     if (
       !complaint_id ||
@@ -295,27 +262,11 @@ router.put(
     }
 
     try {
-
-      const result =
-        await pool.query(
-
-          `UPDATE complaint
-
-           SET
-             status = $1,
-             resolved_by = $2,
-             resolved_at = NOW()
-
-           WHERE id = $3
-           AND status != 'resolved'
-
-           RETURNING *`,
-
-          [
-            status,
-            attendant_id,
-            complaint_id
-          ]
+        const result = await pool.query(
+            `UPDATE complaint SET status = $1, resolved_by = $2, resolved_at = NOW(), resolved_description = $3 
+             WHERE id = $4 AND status != 'resolved'
+             RETURNING *`,
+            [status, attendant_id, resolved_description || null, complaint_id]
         );
 
       if (
@@ -369,104 +320,31 @@ router.put(
 POST COMPLAINT
 ================================================= */
 
-router.post(
-  '/postcomplaint',
-  auth,
-  async (req, res) => {
+router.post('/postcomplaint', auth, async (req, res) => {
+  const { title, type, description, hostel } = req.body;
+  const { id: student_id } = req.user; // Get securely from token
 
-    const {
-      title,
-      description,
-      hostel
-    } = req.body;
-
-    const {
-      id: student_id
-    } = req.user;
-
-    if (
-      !title ||
-      !description ||
-      !hostel
-    ) {
-
-      return res.status(400).json({
-
-        message:
-          'Missing required fields'
-
-      });
-    }
-
-    try {
-
-      const result =
-        await pool.query(
-
-          `INSERT INTO complaint
-          (
-            student_id,
-            title,
-            description,
-            hostel
-          )
-
-          VALUES
-          (
-            $1,
-            $2,
-            $3,
-            $4
-          )
-
-          RETURNING *`,
-
-          [
-            student_id,
-            title,
-            description,
-            hostel
-          ]
-        );
-
-      return res.status(200).json({
-
-        message:
-          'Complaint submitted successfully',
-
-        complaint:
-          result.rows[0]
-      });
-
-    } catch (err) {
-
-      console.error(
-        "Error in postcomplaint:",
-        err
-      );
-
-      return res.status(500).json({
-
-        message:
-          err.message ||
-          'Internal server error',
-
-        error:
-          err.toString(),
-
-        detail:
-          err.detail,
-
-        code:
-          err.code
-      });
-    }
+  if (!title || !type || !description || !hostel) {
+    return res.status(400).json({ message: 'Missing required fields' });
   }
-);
 
-/* =================================================
-MY COMPLAINTS
-================================================= */
+  try {
+    const result = await pool.query(
+      'INSERT INTO complaint (student_id, title, type, description, hostel) VALUES ($1, $2, $3, $4, $5) RETURNING *', 
+      [student_id, title, type, description, hostel]
+    );
+    
+    return res.status(200).json({ message: 'Complaint submitted successfully', complaint: result.rows[0] });
+  } catch (err) {
+    console.error("Error in postcomplaint:", err);
+    return res.status(500).json({
+        message: err.message || 'Internal server error',
+        error: err.toString(),
+        detail: err.detail,
+        code: err.code
+    });
+  }
+});
 
 router.get(
   '/my-complaints',

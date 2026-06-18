@@ -13,6 +13,8 @@ import allocationRoutes from "./roomallocation/allocation.routes.js";
 import adminRoutes from "./roomallocation/admin/admin.routes.js";
 import wardenRoutes from "./roomallocation/first-year-allocation/warden.routes.js";
 
+import importRoutes from "./imports/import.routes.js";
+
 import outpassRoutes from "./routes/outpass.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import complaintRoutes from '../working-routes/complaint.js';
@@ -23,9 +25,7 @@ import outpassRoutesWorking from "../working-routes/outpass.js";
 const app = express();
 
 /*
-=================================================
 GLOBAL MIDDLEWARES
-=================================================
 */
 
 app.use(
@@ -46,9 +46,7 @@ app.use(
 app.use(cookieParser());
 
 /*
-=================================================
 REQUEST LOGGER
-=================================================
 */
 
 app.use((req, res, next) => {
@@ -61,9 +59,7 @@ app.use((req, res, next) => {
 });
 
 /*
-=================================================
 HEALTH CHECK ROUTES
-=================================================
 */
 
 // Root Route
@@ -106,9 +102,7 @@ app.get("/test-db", async (req, res) => {
 });
 
 /*
-=================================================
 API ROUTES
-=================================================
 */
 
 // Auth Routes
@@ -148,10 +142,11 @@ app.use("/api/allocation", allocationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/warden", wardenRoutes);
 
+// Import Routes
+app.use("/api/import", importRoutes);
+
 /*
-=================================================
 404 ROUTE HANDLER
-=================================================
 */
 
 app.use((req, res) => {
@@ -163,9 +158,7 @@ app.use((req, res) => {
 });
 
 /*
-=================================================
 GLOBAL ERROR HANDLER
-=================================================
 */
 
 app.use((err, req, res, next) => {

@@ -14,7 +14,7 @@ const matchesStateAndBranch = (student, nodeConstraint) => {
         return false;
     }
     // Check Branch (if constraint is specific)
-    if (nodeConstraint.branch && student.branch !== nodeConstraint.branch) {
+    if (nodeConstraint.branch && nodeConstraint.branch !== 'ANY' && student.branch !== nodeConstraint.branch) {
         return false;
     }
     return true;

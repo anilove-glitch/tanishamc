@@ -90,6 +90,8 @@ CREATE TABLE hostel (
     total_capacity INT DEFAULT 0,
     current_phase system_phase_enum DEFAULT 'ADMIN_MODE',
     is_paused BOOLEAN DEFAULT FALSE,
+    allocation_date TIMESTAMP WITH TIME ZONE,
+    lobby_opens_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -125,7 +127,7 @@ CREATE TABLE student (
     name VARCHAR(255) NOT NULL,
     father_name VARCHAR(255),
     email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(255),
     hostel VARCHAR(255) NOT NULL,
     hostel_id UUID NOT NULL REFERENCES hostel(id) ON DELETE CASCADE,
     roll_no VARCHAR(100) UNIQUE,

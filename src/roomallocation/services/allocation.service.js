@@ -301,16 +301,18 @@ class AllocationService {
             }
         }
 
-        // If joiningYear is known, count only UPCOMING assignments for that year.
-        // Otherwise, fallback to counting all UPCOMING assignments (e.g., for warden view).
+        // Both Warden and Student views MUST use the true r.current_occupancy to prevent 
+        // assigning students to beds already occupied by ACTIVE seniors or other UPCOMING students.
+        // We can still provide cohort-specific counts if needed, but the primary occupancy must be true occupancy.
         const query = joiningYear
             ? `
                 SELECT r.id, 
                        r.room_number, 
                        r.max_capacity, 
-                       (SELECT COUNT(*)::int FROM room_assignment ra JOIN student s ON s.id = ra.student_id WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING' AND s.joining_year = $2) as current_occupancy,
-                       (r.max_capacity - (SELECT COUNT(*)::int FROM room_assignment ra JOIN student s ON s.id = ra.student_id WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING' AND s.joining_year = $2)) as remaining_beds,
-                       ((SELECT COUNT(*)::int FROM room_assignment ra JOIN student s ON s.id = ra.student_id WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING' AND s.joining_year = $2) < r.max_capacity) as available
+                       r.current_occupancy,
+                       (SELECT COUNT(*)::int FROM room_assignment ra JOIN student s ON s.id = ra.student_id WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING' AND s.joining_year = $2) as cohort_occupancy,
+                       (r.max_capacity - r.current_occupancy) as remaining_beds,
+                       (r.current_occupancy < r.max_capacity) as available
                 FROM room r
                 WHERE r.hostel_id = $1
                 ORDER BY r.room_number ASC
@@ -319,9 +321,9 @@ class AllocationService {
                 SELECT r.id, 
                        r.room_number, 
                        r.max_capacity, 
-                       (SELECT COUNT(*)::int FROM room_assignment ra WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING') as current_occupancy,
-                       (r.max_capacity - (SELECT COUNT(*)::int FROM room_assignment ra WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING')) as remaining_beds,
-                       ((SELECT COUNT(*)::int FROM room_assignment ra WHERE ra.room_id = r.id AND ra.assignment_status = 'UPCOMING') < r.max_capacity) as available
+                       r.current_occupancy,
+                       (r.max_capacity - r.current_occupancy) as remaining_beds,
+                       (r.current_occupancy < r.max_capacity) as available
                 FROM room r
                 WHERE r.hostel_id = $1
                 ORDER BY r.room_number ASC
