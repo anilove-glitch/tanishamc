@@ -234,8 +234,205 @@ const getAllOutpassesByStatus = asyncHandler(async (req, res) => {
     );
 });
 
+/*
+=================================================
+ASSIGN ATTENDANT
+=================================================
+*/
+/*
+=================================================
+ASSIGN ATTENDANT TO HOSTEL
+=================================================
+*/
+const assignAttendant = asyncHandler(async (req, res) => {
+
+    const {
+        attendant_id,
+        hostel_id
+    } = req.body;
+
+    if (
+        !attendant_id ||
+        !hostel_id
+    ) {
+
+        throw new ApiError(
+            400,
+            "attendant_id and hostel_id are required"
+        );
+    }
+
+    const attendantCheck =
+        await pool.query(
+
+            `
+            SELECT *
+            FROM attendant
+            WHERE id = $1
+            `,
+            [attendant_id]
+        );
+
+    if (
+        attendantCheck.rowCount === 0
+    ) {
+
+        throw new ApiError(
+            404,
+            "Attendant not found"
+        );
+    }
+
+    const updatedAttendant =
+        await pool.query(
+
+            `
+            UPDATE attendant
+
+            SET hostel_id = $1
+
+            WHERE id = $2
+
+            RETURNING *;
+            `,
+
+            [
+                hostel_id,
+                attendant_id
+            ]
+        );
+
+    return res.status(200).json(
+
+        new ApiResponse(
+            200,
+            updatedAttendant.rows[0],
+            "Attendant assigned successfully"
+        )
+    );
+});
+/*
+=================================================
+GET HOSTEL OUTPASSES BY STATUS
+=================================================
+*/
+/*
+=================================================
+GET HOSTEL OUTPASSES BY STATUS
+=================================================
+*/
+const getHostelOutpassesByStatus =
+asyncHandler(async (req, res) => {
+
+    const { outp_status } = req.body;
+
+    if (!outp_status) {
+
+        throw new ApiError(
+            400,
+            "Outpass status is required"
+        );
+    }
+
+    const allowedStatus = [
+        "Pending",
+        "Approved",
+        "Rejected"
+    ];
+
+    if (
+        !allowedStatus.includes(outp_status)
+    ) {
+
+        throw new ApiError(
+            400,
+            "Invalid outpass status"
+        );
+    }
+
+    /* ================= ATTENDENT HOSTEL ================= */
+
+    const hostelQuery = `
+        SELECT hostel_id
+        FROM attendent
+        WHERE id = $1
+        LIMIT 1;
+    `;
+
+    const hostelResult =
+        await pool.query(
+            hostelQuery,
+            [req.user.id]
+        );
+
+    if (
+        hostelResult.rows.length === 0
+    ) {
+
+        throw new ApiError(
+            404,
+            "Attendent not found"
+        );
+    }
+
+    const hostelId =
+        hostelResult.rows[0]
+            .hostel_id;
+
+    /* ================= QUERY ================= */
+
+    const query = `
+        SELECT
+            o.*,
+
+            s.name,
+            s.roll_no,
+            s.department,
+            s.email,
+            s.phone,
+            s.hostel,
+
+            r.room_number AS room
+
+        FROM outpass o
+
+        JOIN student s
+        ON o.student_id = s.id
+
+        LEFT JOIN room r
+        ON s.physical_room_id = r.id
+
+        WHERE
+            o.outp_status = $1
+            AND s.hostel_id = $2
+
+        ORDER BY
+            o.created_at DESC;
+    `;
+
+    const result =
+        await pool.query(
+            query,
+            [
+                outp_status,
+                hostelId
+            ]
+        );
+
+    return res.status(200).json(
+
+        new ApiResponse(
+            200,
+            result.rows,
+            `${outp_status} hostel outpasses fetched successfully`
+        )
+    );
+});
+
 export {
     searchByNameOrRollno,
     sortStudentsInRange,
-    getAllOutpassesByStatus
+    getHostelOutpassesByStatus,
+    getAllOutpassesByStatus,
+    assignAttendant 
 };
